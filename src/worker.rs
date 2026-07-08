@@ -1,9 +1,10 @@
 use bytes::BytesMut;
 use serialport::SerialPort;
 use tokio::spawn;
-use tokio::sync::mpsc::{Receiver, Sender, channel};
+use tokio::sync::mpsc::{Receiver, channel};
 use tokio::task::JoinHandle;
 
+use crate::message::ReadResponse;
 use crate::{Message, Reader, Writer};
 
 /// Background worker that owns the blocking serial port.
@@ -25,15 +26,14 @@ where
     T: SerialPort,
 {
     /// Processes read, write, and flush commands until all senders are dropped.
-    async fn run(mut self, mut inbox: Receiver<Message>, loopback: Sender<Message>) -> T {
+    async fn run(mut self, mut inbox: Receiver<Message>) -> T {
         while let Some(message) = inbox.recv().await {
             match message {
                 Message::Read(response) => match self.serial_port.bytes_to_read() {
                     Ok(bytes) => {
                         if bytes == 0 {
-                            loopback
-                                .send(Message::Read(response))
-                                .await
+                            response
+                                .send(Ok(ReadResponse::RetryLater))
                                 .unwrap_or_else(drop);
                             continue;
                         }
@@ -43,7 +43,7 @@ where
                             .send(
                                 self.serial_port
                                     .read_exact(buffer.as_mut())
-                                    .map(|()| buffer.freeze()),
+                                    .map(|()| ReadResponse::Data(buffer.freeze())),
                             )
                             .unwrap_or_else(drop);
                     }
@@ -78,7 +78,7 @@ where
     /// serial port.
     pub fn split(self, buffer: usize) -> (Reader, Writer, JoinHandle<T>) {
         let (tx, rx) = channel(buffer);
-        let handle = spawn(self.run(rx, tx.clone()));
+        let handle = spawn(self.run(rx));
         (Reader::new(tx.clone()), Writer::new(tx), handle)
     }
 }

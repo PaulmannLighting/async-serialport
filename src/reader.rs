@@ -11,6 +11,7 @@ use tokio::sync::mpsc::error::SendError;
 use tokio::sync::oneshot::{Receiver, channel};
 
 use crate::Message;
+use crate::message::ReadResponse;
 
 type SendFut = Pin<Box<dyn Future<Output = Result<(), SendError<Message>>> + Send + 'static>>;
 
@@ -18,7 +19,7 @@ type SendFut = Pin<Box<dyn Future<Output = Result<(), SendError<Message>>> + Sen
 pub struct Reader {
     sender: Sender<Message>,
     sending: Option<SendFut>,
-    receiver: Option<Receiver<io::Result<Bytes>>>,
+    receiver: Option<Receiver<io::Result<ReadResponse>>>,
     buffered: Bytes,
 }
 
@@ -84,9 +85,10 @@ impl AsyncRead for Reader {
                         };
 
                         match result {
-                            Ok(bytes) => {
+                            Ok(ReadResponse::Data(bytes)) => {
                                 reader.buffered = bytes;
                             }
+                            Ok(ReadResponse::RetryLater) => {}
                             Err(error) => {
                                 return Poll::Ready(Err(error));
                             }
