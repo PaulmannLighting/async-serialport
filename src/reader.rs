@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::io::{self, ErrorKind};
 use std::pin::Pin;
@@ -30,6 +31,17 @@ impl Reader {
             receiver: None,
             buffered: Bytes::new(),
         }
+    }
+}
+
+impl Debug for Reader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Reader")
+            .field("sender", &self.sender)
+            .field("is_sending", &self.sending.is_some())
+            .field("has_receiver", &self.receiver.is_some())
+            .field("buffered", &self.buffered)
+            .finish()
     }
 }
 

@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::io::{self, ErrorKind};
 use std::pin::Pin;
@@ -13,6 +14,7 @@ use crate::Message;
 
 type SendFut = Pin<Box<dyn Future<Output = Result<(), SendError<Message>>> + Send + 'static>>;
 
+#[derive(Debug)]
 enum Operation {
     Flush,
     Write { bytes: usize },
@@ -37,6 +39,24 @@ impl Writer {
             sender,
             pending: None,
         }
+    }
+}
+
+impl Debug for Writer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let pending_operation = self.pending.as_ref().map(|pending| &pending.operation);
+
+        f.debug_struct("Writer")
+            .field("sender", &self.sender)
+            .field("pending_operation", &pending_operation)
+            .field(
+                "is_sending",
+                &self
+                    .pending
+                    .as_ref()
+                    .is_some_and(|pending| pending.sending.is_some()),
+            )
+            .finish()
     }
 }
 
