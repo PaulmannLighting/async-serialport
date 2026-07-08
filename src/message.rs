@@ -12,6 +12,7 @@ pub enum ReadResponse {
 }
 
 /// Internal command sent from async I/O halves to the serial-port worker.
+#[expect(variant_size_differences)]
 pub enum Message {
     /// Requests a read from the serial port.
     Read(Sender<Result<ReadResponse>>),
