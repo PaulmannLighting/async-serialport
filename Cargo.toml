@@ -2,6 +2,13 @@
 name = "async-serialport"
 version = "0.1.0"
 edition = "2024"
+authors = ["Richard Neumann <neumann@paulmann.de>"]
+description = "Tokio AsyncRead and AsyncWrite wrappers for serial ports."
+license = "MIT"
+repository = "https://github.com/PaulmannLighting/async-serialport"
+readme = "README.md"
+keywords = ["async", "serial", "serialport", "tokio", "uart"]
+categories = ["asynchronous", "hardware-support"]
 
 [dependencies]
 bytes = "1"
