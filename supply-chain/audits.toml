@@ -4,8 +4,8 @@
 [[audits.async-serialport]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
-version = "0.1.0"
-notes = "AI-assisted local source review of async-serialport 0.1.0: runtime-agnostic async I/O wrappers around a worker-owned serial port using channels; crate denies unsafe code through lints and contains no unsafe blocks, no network/process execution, and filesystem/device access is delegated to the caller-provided serialport implementation."
+version = "0.2.0"
+notes = "AI-assisted local source review of async-serialport 0.2.0: runtime-agnostic async I/O wrappers around a worker-owned serial port using channels; split returns a worker future for caller-selected spawning, the crate denies unsafe code through lints and contains no unsafe blocks, no network/process execution, and filesystem/device access is delegated to the caller-provided serialport implementation."
 
 [[audits.bitflags]]
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
@@ -35,6 +35,12 @@ who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "1.12.0"
 notes = "AI-assisted local source review of bytes 1.12.0 from the Cargo registry cache: byte buffer and Buf/BufMut primitives with unsafe concentrated in buffer ownership, slicing, vtables, reference counting, and initialization paths; no filesystem, network, process, or FFI capabilities in library code."
+
+[[audits.bytes]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "1.12.0 -> 1.12.1"
+notes = "AI-assisted local diff review of bytes 1.12.0 to 1.12.1 from the Cargo registry cache: changes allocate MaybeUninit<Shared> before rebuilding vector-backed shared state so Box::new panics do not drop rebuilt vectors; no new ambient capabilities, network/process/filesystem access, or FFI behavior were introduced."
 
 [[audits.cfg-if]]
 who = "Codex (AI-assisted)"
@@ -148,7 +154,7 @@ notes = "AI-assisted local source review of thiserror-impl 2.0.18 from the Cargo
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "1.52.3"
-notes = "AI-assisted local source review of tokio 1.52.3 from the Cargo registry cache, focused on this crate's enabled features rt, rt-multi-thread, sync, and io-util: unsafe is concentrated in task scheduling, synchronization, wakers, and runtime internals; fs, net, process, signal, and time features are not enabled for this workspace."
+notes = "AI-assisted local source review of tokio 1.52.3 from the Cargo registry cache, focused on this crate's library features sync and io-util plus the test-only rt feature: unsafe is concentrated in task scheduling, synchronization, wakers, and runtime internals; fs, net, process, signal, time, and rt-multi-thread features are not enabled for this workspace."
 
 [[audits.unescaper]]
 who = "Codex (AI-assisted)"
