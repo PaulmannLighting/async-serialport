@@ -1,4 +1,194 @@
 
 # cargo-vet audits file
 
-[audits]
+[[audits.bitflags]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "2.13.0"
+notes = "AI-assisted local source review of bitflags 2.13.0 from the Cargo registry cache: macro-generated bitflag support with unsafe limited to optional bytemuck trait impls and no filesystem, network, process, or FFI capabilities in library code."
+
+[[audits.bytes]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "1.12.0"
+notes = "AI-assisted local source review of bytes 1.12.0 from the Cargo registry cache: byte buffer and Buf/BufMut primitives with unsafe concentrated in buffer ownership, slicing, vtables, reference counting, and initialization paths; no filesystem, network, process, or FFI capabilities in library code."
+
+[[audits.cfg-if]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "1.0.4"
+notes = "AI-assisted local source review of cfg-if 1.0.4 from the Cargo registry cache: macro-only conditional-compilation helper with no unsafe code, build script, filesystem/network/process access, or runtime ambient capabilities."
+
+[[audits.core-foundation]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.10.1"
+notes = "AI-assisted local source review of core-foundation 0.10.1 from the Cargo registry cache: Apple CoreFoundation wrapper with unsafe concentrated in ownership-rule wrappers and FFI calls to system APIs; no process execution or network code, and ambient capability use is limited to the wrapped platform APIs."
+
+[[audits.io-kit-sys]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.4.1"
+notes = "AI-assisted local source review of io-kit-sys 0.4.1 from the Cargo registry cache: raw Apple IOKit/CoreFoundation bindings with unsafe extern declarations and callback types; build script only emits link directives, with no process execution or network behavior."
+
+[[audits.libc]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.2.186"
+notes = "AI-assisted local source review of libc 0.2.186 from the Cargo registry cache: platform libc declarations and constants with unsafe extern surface by design; build script probes compiler/platform metadata and does not introduce runtime filesystem, network, or process capabilities beyond libc bindings themselves."
+
+[[audits.libudev]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.3.0"
+notes = "AI-assisted local source review of libudev 0.3.0 from the Cargo registry cache: safe wrapper over libudev device enumeration and monitoring with unsafe FFI isolated around libudev handles and iterators; ambient access is limited to udev device metadata consistent with crate purpose."
+
+[[audits.libudev-sys]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.1.4"
+notes = "AI-assisted local source review of libudev-sys 0.1.4 from the Cargo registry cache: raw libudev bindings with unsafe extern surface by design; build script uses pkg-config/rustc probing and generated compile checks, with no network access or unrelated runtime behavior."
+
+[[audits.mach2]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.4.3"
+notes = "AI-assisted local source review of mach2 0.4.3 from the Cargo registry cache: macOS Mach API bindings with unsafe extern declarations and thin wrappers; no build script, network access, or process execution in library code."
+
+[[audits.nix]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.26.4"
+notes = "AI-assisted local source review of nix 0.26.4 from the Cargo registry cache: Unix syscall wrappers with unsafe concentrated in FFI boundaries, descriptor handling, and platform abstractions; no build script or network/process behavior beyond explicit syscall APIs."
+
+[[audits.pin-project-lite]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.2.17"
+notes = "AI-assisted local source review of pin-project-lite 0.2.17 from the Cargo registry cache: macro support for pin projections with unsafe code generated for projection invariants; no build script, filesystem, network, process, or FFI capabilities."
+
+[[audits.pkg-config]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.3.33"
+notes = "AI-assisted local source review of pkg-config 0.3.33 from the Cargo registry cache: build-time pkg-config probing helper with no unsafe code; process execution is limited to invoking pkg-config as the advertised build-script function."
+
+[[audits.proc-macro2]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "1.0.106"
+notes = "AI-assisted local source review of proc-macro2 1.0.106 from the Cargo registry cache: procedural macro token abstraction with unsafe limited to small internal implementation details; no runtime filesystem, network, process, or FFI capabilities in library code."
+
+[[audits.quote]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "1.0.46"
+notes = "AI-assisted local source review of quote 1.0.46 from the Cargo registry cache: procedural macro token generation helper with no unsafe code, build script, filesystem, network, process, or FFI capabilities."
+
+[[audits.scopeguard]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "1.2.0"
+notes = "AI-assisted local source review of scopeguard 1.2.0 from the Cargo registry cache: small drop-guard utility with unsafe only in tests/examples and no build script, filesystem, network, process, or FFI capabilities in library code."
+
+[[audits.serialport]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "4.9.0"
+notes = "AI-assisted local source review of serialport 4.9.0 from the Cargo registry cache: cross-platform serial-port implementation with unsafe concentrated in POSIX, Windows, and Apple OS API calls; filesystem/registry access is limited to serial-device discovery and opening configured ports, with no network or process execution."
+
+[[audits.syn]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "2.0.118"
+notes = "AI-assisted local source review of syn 2.0.118 from the Cargo registry cache: Rust parser used by proc macros with no unsafe code in library logic; filesystem references are limited to benches/tests and documentation, with no runtime network or process capabilities."
+
+[[audits.thiserror]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "2.0.18"
+notes = "AI-assisted local source review of thiserror 2.0.18 from the Cargo registry cache: error derive facade with no unsafe code; build script only probes rustc version/cfg behavior and does not perform network access or unrelated runtime behavior."
+
+[[audits.thiserror-impl]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "2.0.18"
+notes = "AI-assisted local source review of thiserror-impl 2.0.18 from the Cargo registry cache: proc-macro implementation for thiserror with no unsafe code in library logic and no build script, network, process, or runtime ambient capabilities."
+
+[[audits.tokio]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "1.52.3"
+notes = "AI-assisted local source review of tokio 1.52.3 from the Cargo registry cache, focused on this crate's enabled features rt, rt-multi-thread, sync, and io-util: unsafe is concentrated in task scheduling, synchronization, wakers, and runtime internals; fs, net, process, signal, and time features are not enabled for this workspace."
+
+[[audits.unescaper]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.1.10"
+notes = "AI-assisted local source review of unescaper 0.1.10 from the Cargo registry cache: string escape parsing helper with no unsafe code, build script, filesystem, network, process, or FFI capabilities."
+
+[[audits.unicode-ident]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "1.0.24"
+notes = "AI-assisted local source review of unicode-ident 1.0.24 from the Cargo registry cache: Unicode identifier table lookup with unsafe limited to bounds-elided table indexing; no filesystem, network, process, or FFI capabilities in library code."
+
+[[audits.windows-sys]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.0"
+notes = "AI-assisted local source review of windows-sys 0.52.0 from the Cargo registry cache: generated raw Windows API bindings with unsafe extern surface by design; no build script, network access, or process execution in library code."
+
+[[audits.windows-targets]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows-targets 0.52.6 from the Cargo registry cache: target-selection crate for Windows import libraries with no unsafe code in library code and no runtime filesystem, network, process, or FFI behavior."
+
+[[audits.windows_aarch64_gnullvm]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_aarch64_gnullvm 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."
+
+[[audits.windows_aarch64_msvc]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_aarch64_msvc 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."
+
+[[audits.windows_i686_gnu]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_i686_gnu 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."
+
+[[audits.windows_i686_gnullvm]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_i686_gnullvm 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."
+
+[[audits.windows_i686_msvc]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_i686_msvc 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."
+
+[[audits.windows_x86_64_gnu]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_x86_64_gnu 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."
+
+[[audits.windows_x86_64_gnullvm]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_x86_64_gnullvm 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."
+
+[[audits.windows_x86_64_msvc]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.52.6"
+notes = "AI-assisted local source review of windows_x86_64_msvc 0.52.6 from the Cargo registry cache: Windows import-library payload crate with build script metadata only and no Rust library logic, unsafe code, network access, or process execution."

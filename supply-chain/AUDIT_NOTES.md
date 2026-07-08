@@ -3,10 +3,11 @@
 These notes summarize the AI-assisted local source review performed while
 setting up `cargo vet`.
 
-Network access was unavailable in the sandbox, so importing Google and Mozilla
-audit sets could not be completed. The cargo-vet store therefore uses generated
-`safe-to-deploy` exemptions for the full dependency graph, with the direct
-runtime dependencies reviewed locally from the Cargo registry cache.
+Shell network access was unavailable in the sandbox, so `cargo vet import`
+could not refresh the Google and Mozilla audit sets directly. The cargo-vet
+store imports a cached Google/Mozilla `imports.lock` and uses local
+AI-assisted `safe-to-deploy` audit records for crate versions not covered by
+those imports. No exemptions are used.
 
 ## Direct Dependencies Reviewed
 
