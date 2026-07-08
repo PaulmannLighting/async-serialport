@@ -5,7 +5,7 @@
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "0.1.0"
-notes = "AI-assisted local source review of async-serialport 0.1.0: Tokio AsyncRead/AsyncWrite wrappers around a worker-owned serial port using channels; crate denies unsafe code through lints and contains no unsafe blocks, no network/process execution, and filesystem/device access is delegated to the caller-provided serialport implementation."
+notes = "AI-assisted local source review of async-serialport 0.1.0: runtime-agnostic async I/O wrappers around a worker-owned serial port using channels; crate denies unsafe code through lints and contains no unsafe blocks, no network/process execution, and filesystem/device access is delegated to the caller-provided serialport implementation."
 
 [[audits.bitflags]]
 who = "Lukasz Anforowicz <lukasza@chromium.org>"

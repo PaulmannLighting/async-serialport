@@ -1,14 +1,15 @@
 # Architecture
 
 `async-serialport` separates the async API from the blocking serial-port API.
-The async halves live in Tokio tasks, while a background worker owns the serial
-port and executes the blocking operations.
+The async halves communicate with a worker future that owns the serial port and
+executes the blocking operations.
 
 ## Components
 
 - `Reader` implements `tokio::io::AsyncRead`.
 - `Writer` implements `tokio::io::AsyncWrite`.
-- `AsyncSerialPort` is the public extension trait that starts the worker.
+- `AsyncSerialPort` is the public extension trait that creates the async halves
+  and worker future.
 - `Worker` is crate-internal, owns the serial port, and receives internal
   `Message` commands.
 - `Message` defines the internal read, write, and flush protocol.
@@ -16,8 +17,8 @@ port and executes the blocking operations.
 ## Construction Flow
 
 Callers call `AsyncSerialPort::split` on an opened serial port. The trait
-implementation creates the internal worker, starts the background task, and
-returns the async halves plus the worker task handle.
+implementation creates the internal worker and returns the async halves plus the
+worker future. Callers spawn that future on their runtime of choice.
 
 ```mermaid
 flowchart LR
@@ -25,7 +26,8 @@ flowchart LR
     Split --> Worker[internal Worker]
     Split --> Reader[Reader]
     Split --> Writer[Writer]
-    Split --> Handle[JoinHandle]
+    Split --> Future[worker future]
+    Future --> Runtime[caller-selected runtime]
 ```
 
 ## Message Flow
@@ -74,6 +76,6 @@ If the worker command channel or a response channel closes while an operation is
 pending, the async half reports `std::io::ErrorKind::BrokenPipe`. Serial-port
 operation failures are forwarded as `std::io::Error` values.
 
-The worker task itself returns the owned serial port after all command senders
+The worker future itself returns the owned serial port after all command senders
 are dropped. Failed response sends are ignored by the worker because they mean
 the requesting async half no longer waits for the result.

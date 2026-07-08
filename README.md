@@ -1,6 +1,6 @@
 # async-serialport
 
-`async-serialport` provides asynchronous Tokio I/O halves for serial ports.
+`async-serialport` provides asynchronous I/O halves for serial ports.
 
 The crate is built around a background worker that owns the blocking serial
 port. Async-facing reader and writer halves communicate with that worker over
@@ -16,8 +16,9 @@ performing the blocking serial-port operations directly inside the task.
 ## Current API
 
 The public API currently exposes the `AsyncSerialPort`, `Reader`, and `Writer`
-types. Call `AsyncSerialPort::split` on a serial port to start the background
-task and receive the async I/O halves.
+types. Call `AsyncSerialPort::split` on a serial port to receive the async I/O
+halves and the worker future. Spawn the worker future on the async runtime of
+your choice.
 
 The worker protocol is internal. Callers should interact with the async halves
 through Tokio's `AsyncRead` and `AsyncWrite` extension traits.
@@ -29,13 +30,14 @@ const BAUD_RATE: u32 = 115_200;
 const COMMAND_BUFFER: usize = 16;
 
 let serial_port = serialport::new("/dev/ttyUSB0", BAUD_RATE).open()?;
-let (reader, writer, worker_task) = serial_port.split(COMMAND_BUFFER);
+let (reader, writer, worker) = serial_port.split(COMMAND_BUFFER);
 ```
 
 ## Runtime
 
-This crate targets Tokio. The worker communicates with the async halves through
-Tokio channels, so applications need to run the halves inside a Tokio runtime.
+The core crate does not require Tokio runtime features. It uses Tokio's
+runtime-agnostic I/O traits and channels, and returns the worker as a future so
+callers can choose how to spawn it.
 
 ## Error Handling
 
@@ -43,5 +45,5 @@ Serial-port errors are returned as `std::io::Error` values through the async I/O
 traits. If the worker channel closes before a request completes, the async half
 returns `std::io::ErrorKind::BrokenPipe`.
 
-When all async halves are dropped, the worker task finishes and returns the
+When all async halves are dropped, the worker future finishes and returns the
 owned serial port.

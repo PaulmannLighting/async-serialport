@@ -1,9 +1,9 @@
 [package]
 name = "async-serialport"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Richard Neumann <neumann@paulmann.de>"]
-description = "Tokio AsyncRead and AsyncWrite wrappers for serial ports."
+description = "Runtime-agnostic async I/O wrappers for serial ports."
 license = "MIT"
 repository = "https://github.com/PaulmannLighting/async-serialport"
 readme = "README.md"
@@ -13,7 +13,10 @@ categories = ["asynchronous", "hardware-support"]
 [dependencies]
 bytes = "1"
 serialport = "4"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "io-util"] }
+tokio = { version = "1", default-features = false, features = ["sync", "io-util"] }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "io-util"] }
 
 [lints.rust]
 absolute_paths_not_starting_with_crate = "warn"

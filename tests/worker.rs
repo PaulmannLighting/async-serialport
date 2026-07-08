@@ -208,7 +208,8 @@ fn runtime() -> Runtime {
 #[test]
 fn serial_port_split_spawns_background_task() {
     runtime().block_on(async {
-        let (reader, writer, worker_task) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let (reader, writer, worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
 
         drop(reader);
         drop(writer);
@@ -223,7 +224,8 @@ fn reader_reads_from_worker_serial_port() {
     const INPUT: &[u8] = b"serial-input";
 
     runtime().block_on(async {
-        let (mut reader, writer, worker_task) = FakeSerialPort::new(INPUT).split(COMMAND_BUFFER);
+        let (mut reader, writer, worker) = FakeSerialPort::new(INPUT).split(COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
         let mut buffer = [0_u8; INPUT.len()];
 
         reader
@@ -250,7 +252,8 @@ fn writer_writes_to_worker_serial_port() {
     const OUTPUT: &[u8] = b"serial-output";
 
     runtime().block_on(async {
-        let (reader, mut writer, worker_task) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let (reader, mut writer, worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
 
         writer
             .write_all(OUTPUT)
