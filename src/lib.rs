@@ -11,8 +11,8 @@
 //! [`tokio::io::AsyncWrite`] traits to callers.
 //!
 //! Call [`AsyncSerialPort::split`] on a serial port to obtain the [`Reader`],
-//! [`Writer`], and worker future. Spawn the worker future on the async runtime
-//! of your choice.
+//! [`Writer`], and [`Worker`] future. Spawn the worker on the async runtime of
+//! your choice.
 
 use std::pin::Pin;
 
@@ -22,7 +22,7 @@ use tokio::sync::mpsc::error::SendError;
 
 use self::message::Message;
 pub use self::reader::Reader;
-use self::worker::Worker;
+pub use self::worker::Worker;
 pub use self::writer::Writer;
 
 mod message;
@@ -33,31 +33,24 @@ mod writer;
 type SendFut =
     Pin<Box<dyn Future<Output = Result<(), SendError<Message>>> + Send + Sync + 'static>>;
 
-/// Future that drives the blocking serial-port worker.
-///
-/// The future resolves with the owned serial port once all [`Reader`] and
-/// [`Writer`] handles have been dropped and the worker command channel closes.
-pub type WorkerFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
-
 /// Extension trait for splitting a serial port into asynchronous I/O halves.
 pub trait AsyncSerialPort: Sized {
-    /// Creates async reader and writer halves plus the worker future.
+    /// Creates async reader and writer halves plus the worker.
     ///
     /// The `buffer` argument configures the capacity of the internal command
-    /// channel used by the reader and writer halves. The returned worker future
+    /// channel used by the reader and writer halves. The returned [`Worker`]
     /// owns the serial port until all command senders are dropped, then resolves
     /// with the serial port.
-    fn split(self, buffer: usize) -> (Reader, Writer, WorkerFuture<Self>);
+    fn split(self, buffer: usize) -> (Reader, Writer, Worker<Self>);
 }
 
 impl<T> AsyncSerialPort for T
 where
     T: SerialPort + 'static,
 {
-    fn split(self, buffer: usize) -> (Reader, Writer, WorkerFuture<Self>) {
-        let worker = Worker::new(self);
+    fn split(self, buffer: usize) -> (Reader, Writer, Worker<Self>) {
         let (tx, rx) = channel(buffer);
-        let worker = Box::pin(worker.run(rx));
+        let worker = Worker::new(self, rx);
         (Reader::new(tx.clone()), Writer::new(tx), worker)
     }
 }

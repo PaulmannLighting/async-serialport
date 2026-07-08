@@ -1,6 +1,6 @@
 [package]
 name = "async-serialport"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 authors = ["Richard Neumann <neumann@paulmann.de>"]
 description = "Runtime-agnostic async I/O wrappers for serial ports."

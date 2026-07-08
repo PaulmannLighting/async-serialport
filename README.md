@@ -9,19 +9,20 @@ channels and expose Tokio's standard I/O traits:
 - `AsyncSerialPort` extends serial ports with `split`.
 - `Reader` implements `tokio::io::AsyncRead`.
 - `Writer` implements `tokio::io::AsyncWrite`.
+- `Worker<T>` is the future that owns and drives the blocking serial port.
 
 This design lets async tasks use serial-port reads, writes, and flushes without
 performing the blocking serial-port operations directly inside the task.
 
 ## Current API
 
-The public API currently exposes the `AsyncSerialPort`, `Reader`, and `Writer`
-types. Call `AsyncSerialPort::split` on a serial port to receive the async I/O
-halves and the worker future. Spawn the worker future on the async runtime of
+The public API currently exposes the `AsyncSerialPort`, `Reader`, `Writer`, and
+`Worker` types. Call `AsyncSerialPort::split` on a serial port to receive the
+async I/O halves and the worker future. Spawn the worker on the async runtime of
 your choice.
 
-The worker protocol is internal. Callers should interact with the async halves
-through Tokio's `AsyncRead` and `AsyncWrite` extension traits.
+The worker's message protocol is internal. Callers should interact with the
+async halves through Tokio's `AsyncRead` and `AsyncWrite` extension traits.
 
 ```rust
 use async_serialport::AsyncSerialPort;
@@ -36,8 +37,8 @@ let (reader, writer, worker) = serial_port.split(COMMAND_BUFFER);
 ## Runtime
 
 The core crate does not require Tokio runtime features. It uses Tokio's
-runtime-agnostic I/O traits and channels, and returns the worker as a future so
-callers can choose how to spawn it.
+runtime-agnostic I/O traits and channels, and returns `Worker<T>` as a future
+so callers can choose how to spawn it.
 
 ## Error Handling
 

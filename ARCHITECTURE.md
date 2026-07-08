@@ -10,24 +10,23 @@ executes the blocking operations.
 - `Writer` implements `tokio::io::AsyncWrite`.
 - `AsyncSerialPort` is the public extension trait that creates the async halves
   and worker future.
-- `Worker` is crate-internal, owns the serial port, and receives internal
-  `Message` commands.
+- `Worker<T>` is the explicit future type returned by `split`, owns the serial
+  port, and receives internal `Message` commands.
 - `Message` defines the internal read, write, and flush protocol.
 
 ## Construction Flow
 
 Callers call `AsyncSerialPort::split` on an opened serial port. The trait
-implementation creates the internal worker and returns the async halves plus the
-worker future. Callers spawn that future on their runtime of choice.
+implementation creates the worker and returns the async halves plus the worker
+future. Callers spawn that future on their runtime of choice.
 
 ```mermaid
 flowchart LR
     Port[serialport::SerialPort] --> Split[AsyncSerialPort::split]
-    Split --> Worker[internal Worker]
+    Split --> Worker[Worker future]
     Split --> Reader[Reader]
     Split --> Writer[Writer]
-    Split --> Future[worker future]
-    Future --> Runtime[caller-selected runtime]
+    Worker --> Runtime[caller-selected runtime]
 ```
 
 ## Message Flow
