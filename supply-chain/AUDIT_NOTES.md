@@ -3,11 +3,11 @@
 These notes summarize the AI-assisted local source review performed while
 setting up `cargo vet`.
 
-Shell network access was unavailable in the sandbox, so `cargo vet import`
-could not refresh the Google and Mozilla audit sets directly. The cargo-vet
-store imports a cached Google/Mozilla `imports.lock` and uses local
-AI-assisted `safe-to-deploy` audit records for crate versions not covered by
-those imports. No exemptions are used.
+Shell network access was unavailable in the sandbox, so live Google and Mozilla
+imports could not be refreshed reliably by plain `cargo vet`. The audit records
+used from the cached Google import data were folded into `audits.toml`, and the
+remaining crate versions are covered by local AI-assisted `safe-to-deploy`
+audit records. No exemptions are used.
 
 ## Direct Dependencies Reviewed
 

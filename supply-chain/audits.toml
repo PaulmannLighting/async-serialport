@@ -1,6 +1,29 @@
 
 # cargo-vet audits file
 
+[[audits.async-serialport]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.1.0"
+notes = "AI-assisted local source review of async-serialport 0.1.0: Tokio AsyncRead/AsyncWrite wrappers around a worker-owned serial port using channels; crate denies unsafe code through lints and contains no unsafe blocks, no network/process execution, and filesystem/device access is delegated to the caller-provided serialport implementation."
+
+[[audits.bitflags]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+version = "1.3.2"
+notes = """
+Imported from Google's cargo-vet audit set in the cached imports.lock.
+
+Security review of earlier versions of the crate can be found at
+(Google-internal, sorry): go/image-crate-chromium-security-review
+
+The crate exposes a function marked as `unsafe`, but doesn't use any
+`unsafe` blocks (except for tests of the single `unsafe` function).  I
+think this justifies marking this crate as `ub-risk-1`.
+
+Additional review comments can be found at https://crrev.com/c/4723145/31
+"""
+
 [[audits.bitflags]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
@@ -24,6 +47,12 @@ who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "0.10.1"
 notes = "AI-assisted local source review of core-foundation 0.10.1 from the Cargo registry cache: Apple CoreFoundation wrapper with unsafe concentrated in ownership-rule wrappers and FFI calls to system APIs; no process execution or network code, and ambient capability use is limited to the wrapped platform APIs."
+
+[[audits.core-foundation-sys]]
+who = "Manish Goregaokar <manishearth@google.com>"
+criteria = "safe-to-deploy"
+version = "0.8.7"
+notes = "Imported from Google's cargo-vet audit set in the cached imports.lock: OSX system APIs."
 
 [[audits.io-kit-sys]]
 who = "Codex (AI-assisted)"
