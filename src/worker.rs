@@ -1,3 +1,6 @@
+use std::io;
+
+use bytes::{Bytes, BytesMut};
 use serialport::SerialPort;
 use tokio::sync::mpsc::Receiver;
 
@@ -21,35 +24,30 @@ impl<T> Worker<T>
 where
     T: SerialPort,
 {
+    fn read_available(&mut self, mut bytes: BytesMut) -> io::Result<Bytes> {
+        let available = self.serial_port.bytes_to_read()?;
+        let available = usize::try_from(available).unwrap_or(usize::MAX);
+        let bytes_to_read = bytes.len().min(available);
+        bytes.truncate(bytes_to_read);
+
+        if bytes.is_empty() {
+            return Ok(bytes.freeze());
+        }
+
+        self.serial_port
+            .read_exact(bytes.as_mut())
+            .map(|()| bytes.freeze())
+    }
+
     /// Processes read, write, and flush commands until all senders are dropped.
     pub async fn run(mut self, mut inbox: Receiver<Message>) -> T {
         while let Some(message) = inbox.recv().await {
             match message {
-                Message::Read {
-                    mut bytes,
-                    response,
-                } => match self.serial_port.bytes_to_read() {
-                    Ok(available) => {
-                        let available = usize::try_from(available).unwrap_or(usize::MAX);
-                        let bytes_to_read = bytes.len().min(available);
-                        bytes.truncate(bytes_to_read);
-
-                        if bytes.is_empty() {
-                            response.send(Ok(bytes.freeze())).unwrap_or_else(drop);
-                            continue;
-                        }
-
-                        let result = self
-                            .serial_port
-                            .read_exact(bytes.as_mut())
-                            .map(|()| bytes.freeze());
-
-                        response.send(result).unwrap_or_else(drop);
-                    }
-                    Err(error) => {
-                        response.send(Err(error.into())).unwrap_or_else(drop);
-                    }
-                },
+                Message::Read { bytes, response } => {
+                    response
+                        .send(self.read_available(bytes))
+                        .unwrap_or_else(drop);
+                }
                 Message::Write { bytes, response } => {
                     response
                         .send(self.serial_port.write_all(&bytes))
