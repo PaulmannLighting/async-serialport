@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::time::Duration;
 
-use async_serialport::Worker;
+use async_serialport::AsyncSerialPort;
 use serialport::{
     ClearBuffer, DataBits, Error, ErrorKind, FlowControl, Parity, SerialPort, StopBits,
 };
@@ -205,10 +205,9 @@ fn runtime() -> Runtime {
 }
 
 #[test]
-fn worker_split_spawns_background_task() {
+fn serial_port_split_spawns_background_task() {
     runtime().block_on(async {
-        let worker = Worker::new(FakeSerialPort::new(&[]));
-        let (reader, writer, worker_task) = worker.split(COMMAND_BUFFER);
+        let (reader, writer, worker_task) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
 
         drop(reader);
         drop(writer);
@@ -223,8 +222,7 @@ fn reader_reads_from_worker_serial_port() {
     const INPUT: &[u8] = b"serial-input";
 
     runtime().block_on(async {
-        let worker = Worker::new(FakeSerialPort::new(INPUT));
-        let (mut reader, writer, worker_task) = worker.split(COMMAND_BUFFER);
+        let (mut reader, writer, worker_task) = FakeSerialPort::new(INPUT).split(COMMAND_BUFFER);
         let mut buffer = [0_u8; INPUT.len()];
 
         reader
@@ -251,8 +249,7 @@ fn writer_writes_to_worker_serial_port() {
     const OUTPUT: &[u8] = b"serial-output";
 
     runtime().block_on(async {
-        let worker = Worker::new(FakeSerialPort::new(&[]));
-        let (reader, mut writer, worker_task) = worker.split(COMMAND_BUFFER);
+        let (reader, mut writer, worker_task) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
 
         writer
             .write_all(OUTPUT)

@@ -8,19 +8,21 @@ port and executes the blocking operations.
 
 - `Reader` implements `tokio::io::AsyncRead`.
 - `Writer` implements `tokio::io::AsyncWrite`.
-- `Worker` owns the serial port and receives internal `Message` commands.
+- `AsyncSerialPort` is the public extension trait that starts the worker.
+- `Worker` is crate-internal, owns the serial port, and receives internal
+  `Message` commands.
 - `Message` defines the internal read, write, and flush protocol.
 
 ## Construction Flow
 
-Callers pass an opened serial port to `Worker::new`. Calling `Worker::split`
-starts the background task and returns the async halves plus the worker task
-handle.
+Callers call `AsyncSerialPort::split` on an opened serial port. The trait
+implementation creates the internal worker, starts the background task, and
+returns the async halves plus the worker task handle.
 
 ```mermaid
 flowchart LR
-    Port[serialport::SerialPort] --> New[Worker::new]
-    New --> Split[Worker::split]
+    Port[serialport::SerialPort] --> Split[AsyncSerialPort::split]
+    Split --> Worker[internal Worker]
     Split --> Reader[Reader]
     Split --> Writer[Writer]
     Split --> Handle[JoinHandle]
