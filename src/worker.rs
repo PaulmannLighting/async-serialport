@@ -1,9 +1,7 @@
-use bytes::BytesMut;
 use serialport::SerialPort;
 use tokio::sync::mpsc::Receiver;
 
 use crate::Message;
-use crate::message::ReadResponse;
 
 /// Background worker that owns the blocking serial port.
 #[derive(Debug)]
@@ -27,23 +25,26 @@ where
     pub async fn run(mut self, mut inbox: Receiver<Message>) -> T {
         while let Some(message) = inbox.recv().await {
             match message {
-                Message::Read(response) => match self.serial_port.bytes_to_read() {
-                    Ok(bytes) => {
-                        if bytes == 0 {
-                            response
-                                .send(Ok(ReadResponse::RetryLater))
-                                .unwrap_or_else(drop);
+                Message::Read {
+                    mut bytes,
+                    response,
+                } => match self.serial_port.bytes_to_read() {
+                    Ok(available) => {
+                        let available = usize::try_from(available).unwrap_or(usize::MAX);
+                        let bytes_to_read = bytes.len().min(available);
+                        bytes.truncate(bytes_to_read);
+
+                        if bytes.is_empty() {
+                            response.send(Ok(bytes.freeze())).unwrap_or_else(drop);
                             continue;
                         }
 
-                        let mut buffer = BytesMut::zeroed(bytes as usize);
-                        response
-                            .send(
-                                self.serial_port
-                                    .read_exact(buffer.as_mut())
-                                    .map(|()| ReadResponse::Data(buffer.freeze())),
-                            )
-                            .unwrap_or_else(drop);
+                        let result = self
+                            .serial_port
+                            .read_exact(bytes.as_mut())
+                            .map(|()| bytes.freeze());
+
+                        response.send(result).unwrap_or_else(drop);
                     }
                     Err(error) => {
                         response.send(Err(error.into())).unwrap_or_else(drop);

@@ -46,14 +46,17 @@ operation completes.
 
 ## Read Path
 
-1. `Reader::poll_read` sends `Message::Read` to the worker.
-2. The worker checks the number of bytes available on the serial port.
-3. If no bytes are available, the worker returns `ReadResponse::RetryLater`.
-4. `Reader` treats `RetryLater` as a pending read and sends another read
-   request instead of completing the caller's read.
-5. When bytes are available, the worker reads them and returns a `Bytes` value.
-6. `Reader` copies as many bytes as fit into the caller's `ReadBuf` and keeps
-   any remaining bytes for later reads.
+1. `Reader::poll_read` creates a zeroed `BytesMut` sized to the caller's
+   remaining `ReadBuf` capacity.
+2. `Reader` sends that buffer to the worker in `Message::Read`.
+3. The worker checks the number of bytes available on the serial port.
+4. The worker reads at most the smaller of the available byte count and the
+   provided buffer length.
+5. The worker truncates the `BytesMut` to the actual read count, freezes it, and
+   returns it through the response channel.
+6. If the returned `Bytes` is empty, `Reader` keeps the read pending and sends
+   another read request instead of completing the caller's read.
+7. Otherwise, `Reader` copies the returned bytes into the caller's `ReadBuf`.
 
 ## Write Path
 

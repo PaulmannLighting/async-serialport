@@ -4,19 +4,18 @@ use std::io::{self, ErrorKind};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, channel};
 
-use crate::message::ReadResponse;
 use crate::{Message, SendFut};
 
 /// Asynchronous reader half for a serial port managed by the background worker.
 pub struct Reader {
     sender: Sender<Message>,
     sending: Option<SendFut>,
-    receiver: Option<Receiver<io::Result<ReadResponse>>>,
+    receiver: Option<Receiver<io::Result<Bytes>>>,
     buffered: Bytes,
 }
 
@@ -82,10 +81,13 @@ impl AsyncRead for Reader {
                         };
 
                         match result {
-                            Ok(ReadResponse::Data(bytes)) => {
+                            Ok(bytes) => {
+                                if bytes.is_empty() {
+                                    continue;
+                                }
+
                                 reader.buffered = bytes;
                             }
-                            Ok(ReadResponse::RetryLater) => {}
                             Err(error) => {
                                 return Poll::Ready(Err(error));
                             }
@@ -101,8 +103,16 @@ impl AsyncRead for Reader {
             }
 
             let (tx, rx) = channel();
+            let bytes = BytesMut::zeroed(buf.remaining());
             let sender = reader.sender.clone();
-            let fut = async move { sender.send(Message::Read(tx)).await };
+            let fut = async move {
+                sender
+                    .send(Message::Read {
+                        bytes,
+                        response: tx,
+                    })
+                    .await
+            };
             reader.sending.replace(Box::pin(fut));
             reader.receiver.replace(rx);
         }

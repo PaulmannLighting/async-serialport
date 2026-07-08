@@ -5,6 +5,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 use async_serialport::AsyncSerialPort;
+use bytes as _;
 use serialport::{
     ClearBuffer, DataBits, Error, ErrorKind, FlowControl, Parity, SerialPort, StopBits,
 };
