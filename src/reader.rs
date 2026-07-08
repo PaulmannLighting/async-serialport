@@ -7,13 +7,10 @@ use std::task::{Context, Poll};
 use bytes::Bytes;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::mpsc::Sender;
-use tokio::sync::mpsc::error::SendError;
 use tokio::sync::oneshot::{Receiver, channel};
 
-use crate::Message;
 use crate::message::ReadResponse;
-
-type SendFut = Pin<Box<dyn Future<Output = Result<(), SendError<Message>>> + Send + 'static>>;
+use crate::{Message, SendFut};
 
 /// Asynchronous reader half for a serial port managed by the background worker.
 pub struct Reader {

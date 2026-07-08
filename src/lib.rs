@@ -13,9 +13,12 @@
 //! Call [`AsyncSerialPort::split`] on a serial port to start the background task
 //! and obtain the [`Reader`] and [`Writer`] halves.
 
+use std::pin::Pin;
+
 use serialport::SerialPort;
 use tokio::spawn;
 use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::error::SendError;
 use tokio::task::JoinHandle;
 
 use self::message::Message;
@@ -27,6 +30,9 @@ mod message;
 mod reader;
 mod worker;
 mod writer;
+
+type SendFut =
+    Pin<Box<dyn Future<Output = Result<(), SendError<Message>>> + Send + Sync + 'static>>;
 
 /// Extension trait for splitting a serial port into asynchronous I/O halves.
 pub trait AsyncSerialPort: Sized {

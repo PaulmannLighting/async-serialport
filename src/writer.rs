@@ -7,12 +7,9 @@ use std::task::{Context, Poll};
 use bytes::Bytes;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::mpsc::error::SendError;
 use tokio::sync::oneshot::{Receiver, channel};
 
-use crate::Message;
-
-type SendFut = Pin<Box<dyn Future<Output = Result<(), SendError<Message>>> + Send + 'static>>;
+use crate::{Message, SendFut};
 
 #[derive(Debug)]
 enum Operation {
