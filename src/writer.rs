@@ -5,11 +5,12 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
+use serialport::SerialPort;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, channel};
 
-use crate::{Message, SendFut};
+use crate::{Message, SendFut, SerialPortGuard};
 
 #[derive(Debug)]
 enum Operation {
@@ -17,29 +18,61 @@ enum Operation {
     Write { bytes: usize },
 }
 
-struct PendingOperation {
-    sending: Option<SendFut>,
+struct PendingOperation<T> {
+    sending: Option<SendFut<T>>,
     receiver: Receiver<io::Result<()>>,
     operation: Operation,
 }
 
 /// Asynchronous writer half for a serial port managed by the background worker.
-pub struct Writer {
-    sender: Sender<Message>,
-    pending: Option<PendingOperation>,
+pub struct Writer<T> {
+    sender: Sender<Message<T>>,
+    pending: Option<PendingOperation<T>>,
 }
 
-impl Writer {
+impl<T> Writer<T>
+where
+    T: SerialPort + 'static,
+{
     /// Creates a writer half backed by the worker command channel.
-    pub(crate) const fn new(sender: Sender<Message>) -> Self {
+    pub(crate) const fn new(sender: Sender<Message<T>>) -> Self {
         Self {
             sender,
             pending: None,
         }
     }
+
+    /// Temporarily removes the serial port from the worker.
+    ///
+    /// While the returned guard exists, asynchronous reads and writes return
+    /// [`io::ErrorKind::NotConnected`]. Dropping the guard returns the serial
+    /// port to the worker and allows asynchronous I/O to resume.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::NotConnected`] if another guard currently owns
+    /// the port, or [`io::ErrorKind::BrokenPipe`] if the worker has stopped.
+    pub async fn take_serial_port(&mut self) -> io::Result<SerialPortGuard<T>> {
+        let (response_tx, response_rx) = channel();
+
+        self.sender
+            .send(Message::TakePort {
+                response: response_tx,
+                worker_sender: self.sender.clone(),
+            })
+            .await
+            .map_err(|_| io::Error::from(ErrorKind::BrokenPipe))?;
+
+        response_rx
+            .await
+            .map_err(|_| io::Error::from(ErrorKind::BrokenPipe))?
+    }
 }
 
-impl Debug for Writer {
+impl<T> Debug for Writer<T>
+where
+    T: SerialPort,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let pending_operation = self.pending.as_ref().map(|pending| &pending.operation);
 
@@ -57,7 +90,10 @@ impl Debug for Writer {
     }
 }
 
-impl Writer {
+impl<T> Writer<T>
+where
+    T: SerialPort + 'static,
+{
     fn poll_pending(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<Operation>> {
         let Some(mut pending) = self.pending.take() else {
             return Poll::Ready(Err(ErrorKind::InvalidInput.into()));
@@ -132,7 +168,10 @@ impl Writer {
     }
 }
 
-impl AsyncWrite for Writer {
+impl<T> AsyncWrite for Writer<T>
+where
+    T: SerialPort + 'static,
+{
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

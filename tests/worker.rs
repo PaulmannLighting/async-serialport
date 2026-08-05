@@ -1,7 +1,9 @@
 //! Integration tests for worker-backed async serial-port halves.
 
 use std::collections::VecDeque;
+use std::future::Future;
 use std::io::{self, Read, Write};
+use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use async_serialport::AsyncSerialPort;
@@ -15,6 +17,8 @@ use tokio::runtime::{Builder, Runtime};
 const COMMAND_BUFFER: usize = 4;
 const DEFAULT_BAUD_RATE: u32 = 115_200;
 const EXPECTED_FLUSH_COUNT: usize = 1;
+const MINIMUM_COMMAND_BUFFER: usize = 1;
+const UPDATED_BAUD_RATE: u32 = 9_600;
 const TEST_PORT_NAME: &str = "fake-serial-port";
 const TEST_TIMEOUT: Duration = Duration::from_millis(100);
 
@@ -267,5 +271,189 @@ fn writer_writes_to_worker_serial_port() {
         let port = worker_task.await.expect("worker task should finish");
         assert_eq!(port.written(), OUTPUT);
         assert_eq!(port.flush_count(), EXPECTED_FLUSH_COUNT);
+    });
+}
+
+#[test]
+fn reader_temporarily_takes_and_returns_serial_port() {
+    const INPUT: &[u8] = b"input-after-return";
+    const OUTPUT: &[u8] = b"output-after-return";
+
+    runtime().block_on(async {
+        let (mut reader, mut writer, worker) =
+            FakeSerialPort::new(INPUT).split(MINIMUM_COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
+        let mut serial_port = reader
+            .take_serial_port()
+            .await
+            .expect("reader should take the serial port");
+
+        assert_eq!(serial_port.name().as_deref(), Some(TEST_PORT_NAME));
+        serial_port
+            .set_baud_rate(UPDATED_BAUD_RATE)
+            .expect("guard should provide mutable access to the serial port");
+
+        let mut read_buffer = [0_u8; INPUT.len()];
+        let read_error = reader
+            .read_exact(&mut read_buffer)
+            .await
+            .expect_err("reads should fail while the guard owns the serial port");
+        assert_eq!(read_error.kind(), io::ErrorKind::NotConnected);
+
+        let write_error = writer
+            .write_all(OUTPUT)
+            .await
+            .expect_err("writes should fail while the guard owns the serial port");
+        assert_eq!(write_error.kind(), io::ErrorKind::NotConnected);
+
+        let flush_error = writer
+            .flush()
+            .await
+            .expect_err("flushes should fail while the guard owns the serial port");
+        assert_eq!(flush_error.kind(), io::ErrorKind::NotConnected);
+
+        drop(serial_port);
+
+        reader
+            .read_exact(&mut read_buffer)
+            .await
+            .expect("reads should resume after the guard is dropped");
+        writer
+            .write_all(OUTPUT)
+            .await
+            .expect("writes should resume after the guard is dropped");
+
+        assert_eq!(&read_buffer, INPUT);
+
+        drop(reader);
+        drop(writer);
+
+        let serial_port = worker_task.await.expect("worker task should finish");
+        assert_eq!(
+            serial_port
+                .baud_rate()
+                .expect("fake serial port should report its baud rate"),
+            UPDATED_BAUD_RATE,
+        );
+        assert_eq!(serial_port.written(), OUTPUT);
+    });
+}
+
+#[test]
+fn writer_takes_serial_port_exclusively() {
+    runtime().block_on(async {
+        let (mut reader, mut writer, worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
+        let serial_port = writer
+            .take_serial_port()
+            .await
+            .expect("writer should take the serial port");
+
+        let Err(error) = reader.take_serial_port().await else {
+            panic!("only one guard should own the serial port");
+        };
+        assert_eq!(error.kind(), io::ErrorKind::NotConnected);
+
+        drop(serial_port);
+
+        let serial_port = reader
+            .take_serial_port()
+            .await
+            .expect("reader should take the returned serial port");
+        assert_eq!(serial_port.name().as_deref(), Some(TEST_PORT_NAME));
+
+        drop(serial_port);
+        drop(reader);
+        drop(writer);
+
+        worker_task.await.expect("worker task should finish");
+    });
+}
+
+#[test]
+fn serial_port_guard_keeps_worker_alive() {
+    runtime().block_on(async {
+        let (mut reader, writer, worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
+        let serial_port = reader
+            .take_serial_port()
+            .await
+            .expect("reader should take the serial port");
+
+        drop(reader);
+        drop(writer);
+        tokio::task::yield_now().await;
+
+        assert!(!worker_task.is_finished());
+
+        drop(serial_port);
+
+        let serial_port = worker_task.await.expect("worker task should finish");
+        assert_eq!(serial_port.name().as_deref(), Some(TEST_PORT_NAME));
+    });
+}
+
+#[test]
+fn cancelled_take_returns_serial_port_to_worker() {
+    runtime().block_on(async {
+        let (mut reader, mut writer, worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
+        let mut take = Box::pin(reader.take_serial_port());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+
+        assert!(matches!(take.as_mut().poll(&mut context), Poll::Pending));
+
+        tokio::task::yield_now().await;
+        drop(take);
+
+        let serial_port = writer
+            .take_serial_port()
+            .await
+            .expect("cancelling a take should return the serial port");
+        assert_eq!(serial_port.name().as_deref(), Some(TEST_PORT_NAME));
+
+        drop(serial_port);
+        drop(reader);
+        drop(writer);
+
+        worker_task.await.expect("worker task should finish");
+    });
+}
+
+#[test]
+fn serial_port_returns_through_full_command_channel() {
+    runtime().block_on(async {
+        let (mut reader, mut writer, worker) =
+            FakeSerialPort::new(&[]).split(MINIMUM_COMMAND_BUFFER);
+        let worker_task = tokio::spawn(worker);
+        let serial_port = writer
+            .take_serial_port()
+            .await
+            .expect("writer should take the serial port");
+        let mut buffer = [0_u8; 1];
+        let mut read = Box::pin(reader.read(&mut buffer));
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+
+        assert!(matches!(read.as_mut().poll(&mut context), Poll::Pending));
+
+        drop(serial_port);
+
+        let error = read
+            .await
+            .expect_err("the queued read should observe the absent serial port");
+        assert_eq!(error.kind(), io::ErrorKind::NotConnected);
+
+        let serial_port = writer
+            .take_serial_port()
+            .await
+            .expect("the full channel should still return the serial port");
+
+        drop(serial_port);
+        drop(reader);
+        drop(writer);
+
+        worker_task.await.expect("worker task should finish");
     });
 }

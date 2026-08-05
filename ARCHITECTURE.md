@@ -6,13 +6,16 @@ executes the blocking operations.
 
 ## Components
 
-- `Reader` implements `tokio::io::AsyncRead`.
-- `Writer` implements `tokio::io::AsyncWrite`.
+- `Reader<T>` implements `tokio::io::AsyncRead` and can temporarily request the
+  worker's concrete serial port.
+- `Writer<T>` implements `tokio::io::AsyncWrite` and can make the same request.
 - `AsyncSerialPort` is the public extension trait that creates the async halves
   and worker future.
 - `Worker<T>` is the explicit future type returned by `split`, owns the serial
   port, and receives internal `Message` commands.
-- `Message` defines the internal read, write, and flush protocol.
+- `SerialPortGuard<T>` provides temporary mutable access and returns the port to
+  the worker when dropped.
+- `Message<T>` defines the internal read, write, flush, and take-port protocol.
 
 ## Construction Flow
 
@@ -33,12 +36,14 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    Reader[Reader AsyncRead] -->|Message::Read| Inbox[mpsc command channel]
-    Writer[Writer AsyncWrite] -->|Message::Write / Message::Flush| Inbox
+    Reader[Reader AsyncRead] -->|Message::Read / Message::TakePort| Inbox[mpsc command channel]
+    Writer[Writer AsyncWrite] -->|Message::Write / Message::Flush / Message::TakePort| Inbox
     Inbox --> Worker[Worker]
     Worker --> Port[serialport::SerialPort]
     Worker -->|oneshot result| Reader
     Worker -->|oneshot result| Writer
+    Worker -->|temporary ownership| Guard[SerialPortGuard]
+    Guard -->|Message::ReturnPort on command channel| Inbox
 ```
 
 Each request sent to the worker contains a one-shot response channel. The async
@@ -69,12 +74,32 @@ operation completes.
 Flush and shutdown use the same request/response structure with
 `Message::Flush`.
 
+## Temporary Ownership Path
+
+1. `Reader::take_serial_port` or `Writer::take_serial_port` sends
+   `Message::TakePort` with a one-shot response channel.
+2. The worker reserves the bounded command channel's additional return slot,
+   removes the concrete port from its `Option<T>`, constructs the guard, and
+   sends that guard to the requester. If the requester is cancelled before
+   receiving it, dropping the queued or rejected guard returns the port.
+3. `SerialPortGuard<T>` owns the port and dereferences mutably to `T`. It also
+   owns a permit for the bounded command channel's reserved return slot.
+4. Dropping the guard uses that permit to send `Message::ReturnPort` through the
+   same command channel without blocking or failing because the channel is full.
+5. The worker restores the returned port. A later take request reserves the
+   return slot again before ownership leaves the worker.
+
 ## Failure Modes
 
 If the worker command channel or a response channel closes while an operation is
 pending, the async half reports `std::io::ErrorKind::BrokenPipe`. Serial-port
 operation failures are forwarded as `std::io::Error` values.
 
+While `SerialPortGuard<T>` owns the port, read, write, flush, and competing
+take-port commands receive `std::io::ErrorKind::NotConnected`. Once the guard is
+dropped, commands resume against the same port value.
+
 The worker future itself returns the owned serial port after all command senders
-are dropped. Failed response sends are ignored by the worker because they mean
-the requesting async half no longer waits for the result.
+are dropped. A guard retains a sender until its drop path has returned the port.
+Failed ordinary I/O response sends are ignored because they mean the requesting
+async half no longer waits for the result.

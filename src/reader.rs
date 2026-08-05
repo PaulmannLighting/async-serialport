@@ -5,11 +5,12 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::{Bytes, BytesMut};
+use serialport::SerialPort;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, channel};
 
-use crate::{Message, SendFut};
+use crate::{Message, SendFut, SerialPortGuard};
 
 enum ReadEvent {
     NoResponse,
@@ -18,22 +19,51 @@ enum ReadEvent {
 }
 
 /// Asynchronous reader half for a serial port managed by the background worker.
-pub struct Reader {
-    sender: Sender<Message>,
-    sending: Option<SendFut>,
+pub struct Reader<T> {
+    sender: Sender<Message<T>>,
+    sending: Option<SendFut<T>>,
     receiver: Option<Receiver<io::Result<Bytes>>>,
     buffered: Bytes,
 }
 
-impl Reader {
+impl<T> Reader<T>
+where
+    T: SerialPort + 'static,
+{
     /// Creates a reader half backed by the worker command channel.
-    pub(crate) fn new(sender: Sender<Message>) -> Self {
+    pub(crate) fn new(sender: Sender<Message<T>>) -> Self {
         Self {
             sender,
             sending: None,
             receiver: None,
             buffered: Bytes::new(),
         }
+    }
+
+    /// Temporarily removes the serial port from the worker.
+    ///
+    /// While the returned guard exists, asynchronous reads and writes return
+    /// [`io::ErrorKind::NotConnected`]. Dropping the guard returns the serial
+    /// port to the worker and allows asynchronous I/O to resume.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::NotConnected`] if another guard currently owns
+    /// the port, or [`io::ErrorKind::BrokenPipe`] if the worker has stopped.
+    pub async fn take_serial_port(&mut self) -> io::Result<SerialPortGuard<T>> {
+        let (response_tx, response_rx) = channel();
+
+        self.sender
+            .send(Message::TakePort {
+                response: response_tx,
+                worker_sender: self.sender.clone(),
+            })
+            .await
+            .map_err(|_| io::Error::from(ErrorKind::BrokenPipe))?;
+
+        response_rx
+            .await
+            .map_err(|_| io::Error::from(ErrorKind::BrokenPipe))?
     }
 
     fn copy_buffered_or_complete_empty_read(&mut self, buf: &mut ReadBuf<'_>) -> bool {
@@ -110,7 +140,10 @@ impl Reader {
     }
 }
 
-impl AsyncRead for Reader {
+impl<T> AsyncRead for Reader<T>
+where
+    T: SerialPort + 'static,
+{
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -143,7 +176,10 @@ impl AsyncRead for Reader {
     }
 }
 
-impl Debug for Reader {
+impl<T> Debug for Reader<T>
+where
+    T: SerialPort,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Reader")
             .field("sender", &self.sender)

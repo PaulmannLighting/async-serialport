@@ -47,6 +47,7 @@ cargo = { level = "warn", priority = -95 }
 all = { level = "warn", priority = -98 }
 
 cargo_common_metadata = "allow"
+multiple_crate_versions = "allow"
 incompatible_msrv = "warn"
 as_ptr_cast_mut = "warn"
 clear_with_drain = "warn"
