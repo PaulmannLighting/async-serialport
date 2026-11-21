@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 use async_serialport::AsyncSerialPort;
 use bytes as _;
 #[cfg(unix)]
+use filedescriptor as _;
+#[cfg(unix)]
 use nix as _;
 use serialport::{
     ClearBuffer, DataBits, Error, ErrorKind, FlowControl, Parity, SerialPort, StopBits,

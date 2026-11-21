@@ -37,7 +37,7 @@ struct PendingRead {
 /// and [`crate::Writer`] handles have been dropped and the worker command
 /// channel closes.
 pub struct Worker<T> {
-    // Drop the readiness helper before closing its serial file descriptor.
+    // Stop the readiness helper and close its duplicate before dropping the port.
     read_wait: Option<ReadWait>,
     serial_port: Option<T>,
     inbox: Receiver<Message<T>>,

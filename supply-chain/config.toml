@@ -6,3 +6,19 @@ version = "0.10"
 
 [policy.async-serialport]
 audit-as-crates-io = true
+
+[policy.async-serialport.dependency-criteria]
+filedescriptor = "safe-to-deploy-for-serial-readiness"
+nix = "safe-to-deploy-for-serial-readiness"
+
+[policy."filedescriptor:0.8.3"]
+dependency-criteria = { libc = "safe-to-deploy", thiserror = "safe-to-deploy", winapi = "safe-to-deploy" }
+
+[policy."nix:0.26.4"]
+criteria = "safe-to-deploy"
+
+[policy."nix:0.32.0".dependency-criteria]
+bitflags = "safe-to-deploy"
+cfg-if = "safe-to-deploy"
+cfg_aliases = "safe-to-deploy"
+libc = "safe-to-deploy"

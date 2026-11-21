@@ -63,7 +63,7 @@ operation completes.
    readiness handle. Each wake allows another availability check.
 4. Dropping the reader cancels the parked request. The worker also cancels its
    wait before returning or lending out the port. Closing a control socket
-   interrupts the native helper so it stops using the descriptor before
+   interrupts the native helper, which closes its duplicate descriptor before
    ownership changes.
 
 ## Write Path

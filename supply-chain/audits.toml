@@ -1,6 +1,9 @@
 
 # cargo-vet audits file
 
+[criteria.safe-to-deploy-for-serial-readiness]
+description = "The dependency meets the safe-to-deploy requirements for its Unix serial-readiness use in async-serialport. The review covers the configured features and reachable descriptor duplication, polling, and cleanup code. Expanding that use requires a new review."
+
 [[audits.async-serialport]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
@@ -36,6 +39,12 @@ criteria = "safe-to-deploy"
 version = "2.13.0"
 notes = "AI-assisted local source review of bitflags 2.13.0 from the Cargo registry cache: macro-generated bitflag support with unsafe limited to optional bytemuck trait impls and no filesystem, network, process, or FFI capabilities in library code."
 
+[[audits.bitflags]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "2.13.0 -> 2.13.2"
+notes = "Reviewed the public bitflags macro diff. The generated all-flags constant accumulates enabled values, and the per-flag constants move outside an anonymous const to avoid a compiler crash. The changes add no unsafe code or I/O."
+
 [[audits.bytes]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
@@ -48,11 +57,29 @@ criteria = "safe-to-deploy"
 delta = "1.12.0 -> 1.12.1"
 notes = "AI-assisted local diff review of bytes 1.12.0 to 1.12.1 from the Cargo registry cache: changes allocate MaybeUninit<Shared> before rebuilding vector-backed shared state so Box::new panics do not drop rebuilt vectors; no new ambient capabilities, network/process/filesystem access, or FFI behavior were introduced."
 
+[[audits.bytes]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "1.12.1 -> 1.12.2"
+notes = "Reviewed buffer pointer and allocation changes. Truncation to zero releases the shared owner, and the replacement pointer represents a zero-length slice. The Vec-backed append path bounds the iterator by spare capacity and preserves the owner through unwinding. Single-byte writes reserve capacity and initialize the byte before extending length. Also reviewed sign extension and vectored ordering changes."
+
 [[audits.cfg-if]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "1.0.4"
 notes = "AI-assisted local source review of cfg-if 1.0.4 from the Cargo registry cache: macro-only conditional-compilation helper with no unsafe code, build script, filesystem/network/process access, or runtime ambient capabilities."
+
+[[audits.cfg-if]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "1.0.4 -> 1.0.5"
+notes = "The library adds deprecation documentation. The conditional macro expansion and runtime capabilities are unchanged."
+
+[[audits.cfg_aliases]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.2.2"
+notes = "Reviewed the published macro, manifest and environment lookups. It evaluates Cargo target and feature settings and emits cfg directives for the requested aliases. It executes no external commands and accesses neither files nor the network."
 
 [[audits.core-foundation]]
 who = "Codex (AI-assisted)"
@@ -66,6 +93,13 @@ criteria = "safe-to-deploy"
 version = "0.8.7"
 notes = "Imported from Google's cargo-vet audit set in the cached imports.lock: OSX system APIs."
 
+[[audits.filedescriptor]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy-for-serial-readiness"
+version = "0.8.3"
+importable = false
+notes = "Reviewed the Unix OwnedHandle duplication, borrow and drop paths. Duplication uses F_DUPFD_CLOEXEC and falls back to dup followed by setting close-on-exec on kernels that reject the atomic operation. On error, the owned duplicate closes before returning. The borrow is tied to that handle and the helper closes it when finished. The crate has no build script. This audit covers OwnedHandle::dup on the caller's live TTY and subsequent descriptor borrowing and cleanup."
+
 [[audits.io-kit-sys]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
@@ -77,6 +111,12 @@ who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "0.2.186"
 notes = "AI-assisted local source review of libc 0.2.186 from the Cargo registry cache: platform libc declarations and constants with unsafe extern surface by design; build script probes compiler/platform metadata and does not introduce runtime filesystem, network, or process capabilities beyond libc bindings themselves."
+
+[[audits.libc]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "0.2.186 -> 0.2.191"
+notes = "Reviewed the published ABI declaration, build configuration and helper changes. The build script reads compiler and Cargo target metadata to emit ABI cfgs. Platform-specific descriptor-set, control-message and signal-union accessors keep their pointer preconditions on unsafe calls. The safe byte-to-C-char slice helper uses equal-sized, byte-aligned types, and opt-in zero defaults initialize C data that can represent zero. Signal equality and hashing use the initialized scalar header fields. No new ambient access was found. Platform declarations were reviewed structurally and the serial polling path was checked on Linux and at compile time on ARMv7."
 
 [[audits.libudev]]
 who = "Codex (AI-assisted)"
@@ -102,11 +142,30 @@ criteria = "safe-to-deploy"
 version = "0.26.4"
 notes = "AI-assisted local source review of nix 0.26.4 from the Cargo registry cache: Unix syscall wrappers with unsafe concentrated in FFI boundaries, descriptor handling, and platform abstractions; no build script or network/process behavior beyond explicit syscall APIs."
 
+[[audits.nix]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy-for-serial-readiness"
+version = "0.32.0"
+importable = false
+notes = "Reviewed the published change to PollFd and poll, timeout and errno conversion, and the build script. PollFd ties the descriptor to its owner's lifetime and retains the libc pollfd layout. The wrapper passes the live slice and its count to libc. The build script emits target cfg aliases. Verified that the resolved feature graph enables only poll for nix 0.32.0, with syslog and signal disabled."
+
+[[audits.nix]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+violation = "=0.32.0"
+notes = "The optional syslog feature's non-Linux openlog wrapper can pass a temporary C string to a libc implementation that retains it, including FreeBSD. The feature is disabled in this workspace."
+
 [[audits.pin-project-lite]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "0.2.17"
 notes = "AI-assisted local source review of pin-project-lite 0.2.17 from the Cargo registry cache: macro support for pin projections with unsafe code generated for projection invariants; no build script, filesystem, network, process, or FFI capabilities."
+
+[[audits.pin-project-lite]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "0.2.17 -> 0.2.18"
+notes = "The generated Drop conflict guard now covers dynamically sized types. The projection code and its pointer invariants are unchanged. Included UI cases exercise trait objects and slices."
 
 [[audits.pkg-config]]
 who = "Codex (AI-assisted)"
@@ -114,17 +173,35 @@ criteria = "safe-to-deploy"
 version = "0.3.33"
 notes = "AI-assisted local source review of pkg-config 0.3.33 from the Cargo registry cache: build-time pkg-config probing helper with no unsafe code; process execution is limited to invoking pkg-config as the advertised build-script function."
 
+[[audits.pkg-config]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "0.3.33 -> 0.3.34"
+notes = "Reviewed argument construction, filename parsing, and build-time environment handling. Cflags remain enabled by default and can be omitted explicitly. The same configured pkg-config executable is invoked directly with argument values, and candidate library existence checks remain scoped to search paths."
+
 [[audits.proc-macro2]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "1.0.106"
 notes = "AI-assisted local source review of proc-macro2 1.0.106 from the Cargo registry cache: procedural macro token abstraction with unsafe limited to small internal implementation details; no runtime filesystem, network, process, or FFI capabilities in library code."
 
+[[audits.proc-macro2]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "1.0.106 -> 1.0.107"
+notes = "Reviewed token parsing, compiler/fallback span invalidation, manifests, and build changes. Updated literal lookahead and span cache invalidation only operate on compiler tokens and thread-local span state. The changes add no network, process or filesystem capability."
+
 [[audits.quote]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "1.0.46"
 notes = "AI-assisted local source review of quote 1.0.46 from the Cargo registry cache: procedural macro token generation helper with no unsafe code, build script, filesystem, network, process, or FFI capabilities."
+
+[[audits.quote]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "1.0.46 -> 1.0.47"
+notes = "The production macro diff updates documentation links. The iterator diagnostic fixture changes and manifest metadata add no generated behavior or I/O."
 
 [[audits.scopeguard]]
 who = "Codex (AI-assisted)"
@@ -138,11 +215,29 @@ criteria = "safe-to-deploy"
 version = "4.9.0"
 notes = "AI-assisted local source review of serialport 4.9.0 from the Cargo registry cache: cross-platform serial-port implementation with unsafe concentrated in POSIX, Windows, and Apple OS API calls; filesystem/registry access is limited to serial-device discovery and opening configured ports, with no network or process execution."
 
+[[audits.serialport]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "4.9.0 -> 4.10.1"
+notes = "Reviewed platform I/O and discovery changes. Adds opt-in USB location metadata, illumos device handling and terminal setup, and explicit errors for unsupported baud rates. New STREAMS FFI receives static terminated module names, and Windows property lookup uses an initialized bounded buffer. TTYPort::pair can leak the master descriptor if setup fails after opening it. The production open_native path still uses owned cleanup during setup."
+
 [[audits.syn]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "2.0.118"
 notes = "AI-assisted local source review of syn 2.0.118 from the Cargo registry cache: Rust parser used by proc macros with no unsafe code in library logic; filesystem references are limited to benches/tests and documentation, with no runtime network or process capabilities."
+
+[[audits.syn]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "2.0.118 -> 2.0.119"
+notes = "Reviewed visitor and parser changes for expressions, paths, generics, patterns and statements. Lookahead and token retention changes operate on supplied syntax, with no new unsafe operations or ambient I/O."
+
+[[audits.syn]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "2.0.118 -> 3.0.10"
+notes = "Reviewed the major-version parser and token-model changes and regenerated traversal implementations. New cursor lookahead advances only after reading a matching punctuation entry, with the next entry or end marker kept in the owned buffer. No build script, process launch, or network or filesystem access was added."
 
 [[audits.thiserror]]
 who = "Codex (AI-assisted)"
@@ -150,17 +245,47 @@ criteria = "safe-to-deploy"
 version = "2.0.18"
 notes = "AI-assisted local source review of thiserror 2.0.18 from the Cargo registry cache: error derive facade with no unsafe code; build script only probes rustc version/cfg behavior and does not perform network access or unrelated runtime behavior."
 
+[[audits.thiserror]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "2.0.18 -> 1.0.69"
+notes = "Reviewed the published library and build-script differences. Runtime code reexports error traits and provides format adapters, and the build script probes the selected compiler for feature support in Cargo's output directory. The older release adds no network access or unsafe runtime code."
+
+[[audits.thiserror]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "2.0.18 -> 2.0.21"
+notes = "Reviewed the library reexports, compiler probe and manifest changes. The new release selects its matching derive crate and updates the minimum Rust version. Error conversions remain local. The build script runs only its existing compiler feature probes."
+
 [[audits.thiserror-impl]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "2.0.18"
 notes = "AI-assisted local source review of thiserror-impl 2.0.18 from the Cargo registry cache: proc-macro implementation for thiserror with no unsafe code in library logic and no build script, network, process, or runtime ambient capabilities."
 
+[[audits.thiserror-impl]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "2.0.18 -> 1.0.69"
+notes = "Reviewed derive input parsing, member validation, format shorthand, hygiene and generated Error, Display and From implementations. The macro emits trait and formatting code for the annotated type without adding unsafe code, I/O or compiler-side ambient capabilities."
+
+[[audits.thiserror-impl]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "2.0.18 -> 2.0.21"
+notes = "Reviewed parser and generated conversion changes. Format-expression parsing tracks nested turbofish delimiters and distinguishes an arrow from a closing bracket. The derive still produces local error and formatting code with no added unsafe output or I/O."
+
 [[audits.tokio]]
 who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "1.52.3"
 notes = "AI-assisted local source review of tokio 1.52.3 from the Cargo registry cache, focused on this crate's library features sync and io-util plus the test-only rt feature: unsafe is concentrated in task scheduling, synchronization, wakers, and runtime internals; fs, net, process, signal, time, and rt-multi-thread features are not enabled for this workspace."
+
+[[audits.tokio]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "1.52.3 -> 1.54.1"
+notes = "Reviewed the published runtime, synchronization, I/O and manifest changes. Semaphore waiters remain pinned and queued state is protected, with waker callbacks moved outside the lock. The MPSC changes preserve slot ownership and handle index wraparound. Readiness registration retains the owning registration until deferred driver release, and the optional io_uring submission path keeps kernel-visible buffers owned after a partial submission. Timer entries retain the runtime handle in 1.54.1, reverting the interval race introduced in 1.54.0. OS I/O remains behind the corresponding features and caller-selected operations. Rechecked the enabled runtime, time, sync and I/O paths with the crate integration tests."
 
 [[audits.unescaper]]
 who = "Codex (AI-assisted)"
@@ -173,6 +298,30 @@ who = "Codex (AI-assisted)"
 criteria = "safe-to-deploy"
 version = "1.0.24"
 notes = "AI-assisted local source review of unicode-ident 1.0.24 from the Cargo registry cache: Unicode identifier table lookup with unsafe limited to bounds-elided table indexing; no filesystem, network, process, or FFI capabilities in library code."
+
+[[audits.unicode-ident]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.27"
+notes = "Reviewed generated Unicode tables and compressed trie layout. Exhaustively checked every Unicode scalar against both lookup index calculations. The highest indices were 4959 and 7999 against 8248 leaf bytes. The crate remains table-only with no runtime I/O."
+
+[[audits.winapi]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.3.9"
+notes = "Reviewed the manifest, build script, declaration and macro patterns, including safe address and byte-order helpers. Windows FFI declarations and COM invocations require unsafe callers. The build script reads target and feature variables and emits fixed library and cfg declarations. It launches no processes and accesses neither the filesystem nor the network."
+
+[[audits.winapi-i686-pc-windows-gnu]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.4.0"
+notes = "Reviewed the stub and build script and inspected all 1376 bundled binary archives and 11 linker scripts. Disassembly yielded only jump thunks and padding; all 1053 linker-script references target bundled archives. The build script only emits the package-local link search path."
+
+[[audits.winapi-x86_64-pc-windows-gnu]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.4.0"
+notes = "Reviewed the stub and build script and inspected all 1404 bundled binary archives and 12 linker scripts. Disassembly yielded only jump thunks and padding; all 1086 linker-script references target bundled archives. The build script only emits the package-local link search path."
 
 [[audits.windows-sys]]
 who = "Codex (AI-assisted)"

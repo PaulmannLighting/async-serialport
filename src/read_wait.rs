@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::io::{self, ErrorKind};
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd};
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{Sender, channel};
@@ -9,16 +9,16 @@ use std::thread;
 use std::time::Duration;
 
 #[cfg(unix)]
+use filedescriptor::OwnedHandle;
+#[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
-use nix::poll::{PollFd, PollFlags, poll};
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 #[cfg(unix)]
 use serialport::TTYPort;
 use tokio::sync::oneshot;
 
 const RETRY_INTERVAL: Duration = Duration::from_millis(5);
-#[cfg(unix)]
-const WAIT_INDEFINITELY: i32 = -1;
 
 /// Wakes the worker when the port is readable or a fallback retry is due.
 pub struct ReadWait {
@@ -32,7 +32,7 @@ impl ReadWait {
     pub(crate) fn new(port: &dyn Any) -> io::Result<Self> {
         #[cfg(unix)]
         if let Some(port) = port.downcast_ref::<TTYPort>() {
-            return Self::native(port.as_raw_fd());
+            return Self::native(port);
         }
 
         #[cfg(not(unix))]
@@ -66,14 +66,15 @@ impl ReadWait {
     }
 
     #[cfg(unix)]
-    fn native(serial_fd: RawFd) -> io::Result<Self> {
+    fn native(port: &TTYPort) -> io::Result<Self> {
+        let serial_fd = OwnedHandle::dup(port).map_err(io::Error::other)?;
         let (requests, receiver) = channel::<oneshot::Sender<io::Result<()>>>();
         let (stop, stopped) = UnixStream::pair()?;
         let thread = thread::Builder::new()
             .name("serial-read-ready".into())
             .spawn(move || {
                 for response in receiver {
-                    let result = wait_readable(serial_fd, &stopped);
+                    let result = wait_readable(serial_fd.as_fd(), &stopped);
                     let _ = response.send(result);
                 }
             })?;
@@ -98,14 +99,14 @@ impl Drop for ReadWait {
 }
 
 #[cfg(unix)]
-fn wait_readable(serial_fd: RawFd, stop: &UnixStream) -> io::Result<()> {
+fn wait_readable(serial_fd: BorrowedFd<'_>, stop: &UnixStream) -> io::Result<()> {
     let mut descriptors = [
         PollFd::new(serial_fd, PollFlags::POLLIN),
-        PollFd::new(stop.as_raw_fd(), PollFlags::POLLIN),
+        PollFd::new(stop.as_fd(), PollFlags::POLLIN),
     ];
 
     loop {
-        match poll(&mut descriptors, WAIT_INDEFINITELY) {
+        match poll(&mut descriptors, PollTimeout::NONE) {
             Ok(_) => break,
             Err(Errno::EINTR) => (),
             Err(error) => return Err(io::Error::from(error)),
