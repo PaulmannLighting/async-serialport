@@ -7,6 +7,12 @@ criteria = "safe-to-deploy"
 version = "0.2.0"
 notes = "AI-assisted local source review of async-serialport 0.2.0: runtime-agnostic async I/O wrappers around a worker-owned serial port using channels; split returns a worker future for caller-selected spawning, the crate denies unsafe code through lints and contains no unsafe blocks, no network/process execution, and filesystem/device access is delegated to the caller-provided serialport implementation."
 
+[[audits.async-serialport]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+version = "0.4.0"
+notes = "AI-assisted local source review of async-serialport 0.4.0. The worker performs I/O on the caller-provided port and transfers it exclusively through a guard with a reserved channel slot for return. The native readiness helper polls the port descriptor and a private Unix socket pair for cancellation. The worker stops and joins that helper before releasing the port. The timed fallback uses a sleeping thread and receives no device handle. Reviewed the crate manifest and library sources for unsafe code, filesystem access, external network connections, and process execution. The crate contains no unsafe code, build script, or access beyond the supplied serial port and private socket pair."
+
 [[audits.bitflags]]
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
 criteria = "safe-to-deploy"
