@@ -52,17 +52,19 @@ operation completes.
 
 ## Read Path
 
-1. `Reader::poll_read` creates a zeroed `BytesMut` sized to the caller's
-   remaining `ReadBuf` capacity.
-2. `Reader` sends that buffer to the worker in `Message::Read`.
-3. The worker checks the number of bytes available on the serial port.
-4. The worker reads at most the smaller of the available byte count and the
-   provided buffer length.
-5. The worker truncates the `BytesMut` to the actual read count, freezes it, and
-   returns it through the response channel.
-6. If the returned `Bytes` is empty, `Reader` keeps the read pending and sends
-   another read request instead of completing the caller's read.
-7. Otherwise, `Reader` copies the returned bytes into the caller's `ReadBuf`.
+1. `Reader::poll_read` completes a zero-capacity read immediately. Otherwise it
+   sends a `Message::Read` with the caller's remaining `ReadBuf` capacity.
+2. The worker checks how many bytes are available. It allocates a buffer only
+   when there are bytes to read, and reads once up to the requested capacity.
+   The reader copies the resulting bytes into the caller's `ReadBuf`.
+3. If no bytes are available, the worker retains the request and polls a
+   readiness response alongside the command channel. A lazily started helper
+   waits with `poll` for native Unix TTYs or a 5 ms timer for ports without a
+   readiness handle. Each wake allows another availability check.
+4. Dropping the reader cancels the parked request. The worker also cancels its
+   wait before returning or lending out the port. Closing a control socket
+   interrupts the native helper so it stops using the descriptor before
+   ownership changes.
 
 ## Write Path
 
@@ -79,6 +81,7 @@ Flush and shutdown use the same request/response structure with
 1. `Reader::take_serial_port` or `Writer::take_serial_port` sends
    `Message::TakePort` with a one-shot response channel.
 2. The worker reserves the bounded command channel's additional return slot,
+   tells any parked reader to retry on its next poll, stops the read wait,
    removes the concrete port from its `Option<T>`, constructs the guard, and
    sends that guard to the requester. If the requester is cancelled before
    receiving it, dropping the queued or rejected guard returns the port.

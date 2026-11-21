@@ -36,6 +36,15 @@ let serial_port = serialport::new("/dev/ttyUSB0", BAUD_RATE).open()?;
 let (reader, writer, worker) = serial_port.split(COMMAND_BUFFER);
 ```
 
+## Idle Reads
+
+An idle read stays pending while the worker services writes, flushes, and port
+access. On Unix, a concrete `serialport::TTYPort` from `open_native()` uses OS
+readability notifications and reports hangups to the reader. Boxed and custom
+ports use a 5 ms retry interval because `SerialPort` exposes no readiness handle.
+Data arriving just after a fallback check can wait up to one interval plus
+scheduling time before it is read.
+
 ## Temporary Serial-Port Access
 
 Either async half can temporarily remove the concrete serial port from the
@@ -69,6 +78,7 @@ the worker through the same bounded command channel. A reserved return slot
 keeps this drop path non-blocking even when the configured command capacity is
 full. While a guard owns the port, reads, writes, flushes, and another
 `take_serial_port` call return `std::io::ErrorKind::NotConnected`.
+A read already parked when the port is taken can retry after the guard returns.
 
 ## Runtime
 

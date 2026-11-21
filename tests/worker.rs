@@ -3,16 +3,22 @@
 use std::collections::VecDeque;
 use std::future::Future;
 use std::io::{self, Read, Write};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_serialport::AsyncSerialPort;
 use bytes as _;
+#[cfg(unix)]
+use nix as _;
 use serialport::{
     ClearBuffer, DataBits, Error, ErrorKind, FlowControl, Parity, SerialPort, StopBits,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::{Builder, Runtime};
+use tokio::time::timeout;
 
 const COMMAND_BUFFER: usize = 4;
 const DEFAULT_BAUD_RATE: u32 = 115_200;
@@ -21,10 +27,14 @@ const MINIMUM_COMMAND_BUFFER: usize = 1;
 const UPDATED_BAUD_RATE: u32 = 9_600;
 const TEST_PORT_NAME: &str = "fake-serial-port";
 const TEST_TIMEOUT: Duration = Duration::from_millis(100);
+const TEST_DEADLINE: Duration = Duration::from_secs(5);
+const IDLE_POLLS: usize = 2_000;
+const FALLBACK_RETRY_INTERVAL: Duration = Duration::from_millis(5);
 
 #[derive(Debug)]
 struct FakeSerialPort {
-    read_buffer: VecDeque<u8>,
+    read_buffer: Arc<Mutex<VecDeque<u8>>>,
+    availability_checks: Arc<AtomicUsize>,
     write_buffer: Vec<u8>,
     baud_rate: u32,
     data_bits: DataBits,
@@ -38,7 +48,8 @@ struct FakeSerialPort {
 impl FakeSerialPort {
     fn new(input: &[u8]) -> Self {
         Self {
-            read_buffer: input.iter().copied().collect(),
+            read_buffer: Arc::new(Mutex::new(input.iter().copied().collect())),
+            availability_checks: Arc::new(AtomicUsize::new(0)),
             write_buffer: Vec::new(),
             baud_rate: DEFAULT_BAUD_RATE,
             data_bits: DataBits::Eight,
@@ -61,15 +72,17 @@ impl FakeSerialPort {
 
 impl Read for FakeSerialPort {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let bytes_to_read = self.read_buffer.len().min(buf.len());
+        let mut read_buffer = self
+            .read_buffer
+            .lock()
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        let bytes_to_read = read_buffer.len().min(buf.len());
 
-        for byte in buf.iter_mut().take(bytes_to_read) {
-            let Some(next) = self.read_buffer.pop_front() else {
-                return Err(io::ErrorKind::UnexpectedEof.into());
-            };
+        for (byte, next) in buf.iter_mut().zip(read_buffer.drain(..bytes_to_read)) {
             *byte = next;
         }
 
+        drop(read_buffer);
         Ok(bytes_to_read)
     }
 }
@@ -170,7 +183,10 @@ impl SerialPort for FakeSerialPort {
     }
 
     fn bytes_to_read(&self) -> serialport::Result<u32> {
+        self.availability_checks.fetch_add(1, Ordering::Relaxed);
         self.read_buffer
+            .lock()
+            .map_err(|error| Error::new(ErrorKind::Unknown, error.to_string()))?
             .len()
             .try_into()
             .map_err(|_| Error::new(ErrorKind::Unknown, "read buffer length exceeds u32"))
@@ -205,8 +221,159 @@ impl SerialPort for FakeSerialPort {
 
 fn runtime() -> Runtime {
     Builder::new_current_thread()
+        .enable_time()
         .build()
         .expect("test runtime should build")
+}
+
+#[test]
+fn idle_read_retries_only_on_timer_and_receives_fragmented_input() {
+    const FIRST_FRAGMENT: &[u8] = b"first";
+    const SECOND_FRAGMENT: &[u8] = b"second";
+    const OUTPUT: &[u8] = b"command";
+
+    runtime().block_on(async {
+        let port = FakeSerialPort::new(&[]);
+        let input = Arc::clone(&port.read_buffer);
+        let checks = Arc::clone(&port.availability_checks);
+        let (mut reader, mut writer, mut worker) = port.split(COMMAND_BUFFER);
+        let mut buffer = [0; FIRST_FRAGMENT.len() + SECOND_FRAGMENT.len()];
+        let mut context = Context::from_waker(Waker::noop());
+        assert_eq!(reader.read(&mut []).await.unwrap(), 0);
+        assert_eq!(checks.load(Ordering::Relaxed), 0);
+
+        timeout(TEST_DEADLINE, async {
+            let mut read = Box::pin(reader.read(&mut buffer));
+            let started = Instant::now();
+            for _ in 0..IDLE_POLLS {
+                assert!(read.as_mut().poll(&mut context).is_pending());
+                assert!(Pin::new(&mut worker).poll(&mut context).is_pending());
+            }
+            let attempts = checks.load(Ordering::Relaxed) as u128;
+            let elapsed_intervals =
+                started.elapsed().as_nanos() / FALLBACK_RETRY_INTERVAL.as_nanos();
+            assert!(
+                (1..=1 + elapsed_intervals).contains(&attempts),
+                "{attempts} availability checks across {elapsed_intervals} retry intervals"
+            );
+
+            let task = tokio::spawn(worker);
+            writer.write_all(OUTPUT).await.unwrap();
+            writer.flush().await.unwrap();
+            assert!(read.as_mut().poll(&mut context).is_pending());
+
+            input.lock().unwrap().extend(FIRST_FRAGMENT);
+            assert_eq!(read.await.unwrap(), FIRST_FRAGMENT.len());
+            assert_eq!(&buffer[..FIRST_FRAGMENT.len()], FIRST_FRAGMENT);
+
+            input.lock().unwrap().extend(SECOND_FRAGMENT);
+            reader
+                .read_exact(&mut buffer[FIRST_FRAGMENT.len()..])
+                .await
+                .unwrap();
+            assert_eq!(&buffer[FIRST_FRAGMENT.len()..], SECOND_FRAGMENT);
+
+            drop(reader);
+            drop(writer);
+            let port = task.await.unwrap();
+            assert_eq!(port.written(), OUTPUT);
+            assert_eq!(port.flush_count(), EXPECTED_FLUSH_COUNT);
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn native_pending_read_handles_port_handoff_and_disconnect() {
+    const INPUT: &[u8] = b"after-handoff";
+    const OUTPUT: &[u8] = b"serial-command";
+
+    runtime().block_on(async {
+        let (mut peer, port) = serialport::TTYPort::pair().unwrap();
+        let (mut reader, mut writer, mut worker) = port.split(MINIMUM_COMMAND_BUFFER);
+        let mut buffer = [0; INPUT.len()];
+        let mut context = Context::from_waker(Waker::noop());
+        let mut read = Box::pin(reader.read(&mut buffer));
+
+        assert!(read.as_mut().poll(&mut context).is_pending());
+        assert!(Pin::new(&mut worker).poll(&mut context).is_pending());
+        drop(read);
+
+        let task = tokio::spawn(worker);
+        timeout(TEST_DEADLINE, async {
+            let guard = reader.take_serial_port().await.unwrap();
+            drop(guard);
+
+            let mut read = Box::pin(reader.read(&mut buffer));
+            assert!(read.as_mut().poll(&mut context).is_pending());
+            writer.write_all(OUTPUT).await.unwrap();
+            writer.flush().await.unwrap();
+            assert!(read.as_mut().poll(&mut context).is_pending());
+            let mut output = [0; OUTPUT.len()];
+            peer.read_exact(&mut output).unwrap();
+            assert_eq!(&output, OUTPUT);
+
+            peer.write_all(INPUT).unwrap();
+            assert_eq!(read.await.unwrap(), INPUT.len());
+            assert_eq!(&buffer, INPUT);
+
+            let mut read = Box::pin(reader.read(&mut buffer));
+            assert!(read.as_mut().poll(&mut context).is_pending());
+            let guard = writer.take_serial_port().await.unwrap();
+            assert_eq!(read.await.unwrap_err().kind(), io::ErrorKind::NotConnected);
+            drop(guard);
+
+            let mut read = Box::pin(reader.read(&mut buffer));
+            assert!(read.as_mut().poll(&mut context).is_pending());
+            writer.flush().await.unwrap();
+            drop(peer);
+            assert_eq!(read.await.unwrap_err().kind(), io::ErrorKind::BrokenPipe);
+
+            drop(reader);
+            drop(writer);
+            task.await.unwrap();
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn worker_returns_port_when_reader_is_dropped_during_native_wait() {
+    runtime().block_on(async {
+        let (_peer, port) = serialport::TTYPort::pair().unwrap();
+        let (mut reader, writer, mut worker) = port.split(COMMAND_BUFFER);
+        let mut buffer = [0];
+        let mut read = Box::pin(reader.read(&mut buffer));
+        let mut context = Context::from_waker(Waker::noop());
+
+        assert!(read.as_mut().poll(&mut context).is_pending());
+        assert!(Pin::new(&mut worker).poll(&mut context).is_pending());
+        drop(read);
+        drop(reader);
+        drop(writer);
+
+        timeout(TEST_DEADLINE, worker).await.unwrap();
+    });
+}
+
+#[test]
+fn pending_read_reports_worker_shutdown() {
+    runtime().block_on(async {
+        let (mut reader, _writer, mut worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let mut buffer = [0];
+        let mut read = Box::pin(reader.read(&mut buffer));
+        let mut context = Context::from_waker(Waker::noop());
+
+        assert!(read.as_mut().poll(&mut context).is_pending());
+        assert!(Pin::new(&mut worker).poll(&mut context).is_pending());
+        drop(worker);
+
+        assert_eq!(read.await.unwrap_err().kind(), io::ErrorKind::BrokenPipe);
+    });
 }
 
 #[test]

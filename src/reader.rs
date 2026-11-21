@@ -4,25 +4,20 @@ use std::io::{self, ErrorKind};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use serialport::SerialPort;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, channel};
 
+use crate::message::ReadResponse;
 use crate::{Message, SendFut, SerialPortGuard};
-
-enum ReadEvent {
-    NoResponse,
-    RetryLater,
-    Data(Bytes),
-}
 
 /// Asynchronous reader half for a serial port managed by the background worker.
 pub struct Reader<T> {
     sender: Sender<Message<T>>,
     sending: Option<SendFut<T>>,
-    receiver: Option<Receiver<io::Result<Bytes>>>,
+    receiver: Option<Receiver<ReadResponse>>,
     buffered: Bytes,
 }
 
@@ -98,23 +93,14 @@ where
         }
     }
 
-    fn poll_response(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<ReadEvent>> {
+    fn poll_response(&mut self, cx: &mut Context<'_>) -> Poll<ReadResponse> {
         let Some(mut receiver) = self.receiver.take() else {
-            return Poll::Ready(Ok(ReadEvent::NoResponse));
+            return Poll::Ready(Ok(None));
         };
 
         match Pin::new(&mut receiver).poll(cx) {
-            Poll::Ready(result) => {
-                let Ok(result) = result else {
-                    return Poll::Ready(Err(ErrorKind::BrokenPipe.into()));
-                };
-
-                match result {
-                    Ok(bytes) if bytes.is_empty() => Poll::Ready(Ok(ReadEvent::RetryLater)),
-                    Ok(bytes) => Poll::Ready(Ok(ReadEvent::Data(bytes))),
-                    Err(error) => Poll::Ready(Err(error)),
-                }
-            }
+            Poll::Ready(Ok(result)) => Poll::Ready(result),
+            Poll::Ready(Err(_)) => Poll::Ready(Err(ErrorKind::BrokenPipe.into())),
             Poll::Pending => {
                 self.receiver.replace(receiver);
                 Poll::Pending
@@ -122,14 +108,13 @@ where
         }
     }
 
-    fn start_read(&mut self, bytes_to_read: usize) {
+    fn start_read(&mut self, capacity: usize) {
         let (tx, rx) = channel();
-        let bytes = BytesMut::zeroed(bytes_to_read);
         let sender = self.sender.clone();
         let fut = async move {
             sender
                 .send(Message::Read {
-                    bytes,
+                    capacity,
                     response: tx,
                 })
                 .await
@@ -163,10 +148,8 @@ where
             }
 
             match reader.poll_response(cx) {
-                Poll::Ready(Ok(ReadEvent::NoResponse | ReadEvent::RetryLater)) => {
-                    reader.start_read(buf.remaining());
-                }
-                Poll::Ready(Ok(ReadEvent::Data(bytes))) => {
+                Poll::Ready(Ok(None)) => reader.start_read(buf.remaining()),
+                Poll::Ready(Ok(Some(bytes))) => {
                     reader.buffered = bytes;
                 }
                 Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),

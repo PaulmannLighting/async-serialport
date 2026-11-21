@@ -31,6 +31,7 @@ pub use self::writer::Writer;
 
 mod message;
 mod port_guard;
+mod read_wait;
 mod reader;
 mod worker;
 mod writer;

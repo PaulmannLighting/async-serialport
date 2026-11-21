@@ -15,8 +15,11 @@ bytes = "1"
 serialport = "4"
 tokio = { version = "1", default-features = false, features = ["sync", "io-util"] }
 
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.26.4", default-features = false, features = ["poll"] }
+
 [dev-dependencies]
-tokio = { version = "1", default-features = false, features = ["rt", "sync", "io-util"] }
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "io-util", "time"] }
 
 [lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
