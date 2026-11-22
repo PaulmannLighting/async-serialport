@@ -52,33 +52,37 @@ worker. This is useful for serial-port-specific configuration that is not part
 of `AsyncRead` or `AsyncWrite`:
 
 ```rust
-# use async_serialport::AsyncSerialPort;
-# use serialport::SerialPort;
-# const BAUD_RATE: u32 = 115_200;
-# const COMMAND_BUFFER: usize = 16;
-const CONFIGURED_BAUD_RATE: u32 = 57_600;
-# async fn configure() -> Result<(), Box<dyn std::error::Error>> {
-let serial_port = serialport::new("/dev/ttyUSB0", BAUD_RATE).open()?;
-let (mut reader, writer, worker) = serial_port.split(COMMAND_BUFFER);
-let worker_task = tokio::spawn(worker);
+use async_serialport::AsyncSerialPort;
+use serialport::SerialPort;
 
-let mut serial_port = reader.take_serial_port().await?;
-serial_port.set_baud_rate(CONFIGURED_BAUD_RATE)?;
-drop(serial_port);
-drop(reader);
-drop(writer);
-worker_task.await?;
-# Ok(())
-# }
+const BAUD_RATE: u32 = 115_200;
+const COMMAND_BUFFER: usize = 16;
+const CONFIGURED_BAUD_RATE: u32 = 57_600;
+
+async fn configure() -> Result<(), Box<dyn std::error::Error>> {
+    let serial_port = serialport::new("/dev/ttyUSB0", BAUD_RATE).open()?;
+    let (mut reader, writer, worker) = serial_port.split(COMMAND_BUFFER);
+    let worker_task = tokio::spawn(worker);
+
+    let mut serial_port = reader.take_serial_port().await?;
+    serial_port.set_baud_rate(CONFIGURED_BAUD_RATE)?;
+    drop(serial_port);
+    drop(reader);
+    drop(writer);
+    worker_task.await?;
+    Ok(())
+}
 ```
 
 `SerialPortGuard<T>` implements `Deref<Target = T>` and `DerefMut`, preserving
 access to the exact concrete port type. Dropping the guard returns the port to
 the worker through the same bounded command channel. A reserved return slot
 keeps this drop path non-blocking even when the configured command capacity is
-full. While a guard owns the port, reads, writes, flushes, and another
-`take_serial_port` call return `std::io::ErrorKind::NotConnected`.
-A read already parked when the port is taken can retry after the guard returns.
+full.
+
+While a guard owns the port, reads, writes, flushes, and another
+`take_serial_port` call return `std::io::ErrorKind::NotConnected`. A read already
+parked when the port is taken can retry after the guard returns.
 
 ## Runtime
 
