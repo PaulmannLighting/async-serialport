@@ -363,9 +363,9 @@ fn worker_returns_port_when_reader_is_dropped_during_native_wait() {
 }
 
 #[test]
-fn pending_read_reports_worker_shutdown() {
+fn pending_and_new_io_report_worker_shutdown() {
     runtime().block_on(async {
-        let (mut reader, _writer, mut worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
+        let (mut reader, mut writer, mut worker) = FakeSerialPort::new(&[]).split(COMMAND_BUFFER);
         let mut buffer = [0];
         let mut read = Box::pin(reader.read(&mut buffer));
         let mut context = Context::from_waker(Waker::noop());
@@ -375,6 +375,18 @@ fn pending_read_reports_worker_shutdown() {
         drop(worker);
 
         assert_eq!(read.await.unwrap_err().kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(
+            reader.read(&mut buffer).await.unwrap_err().kind(),
+            io::ErrorKind::BrokenPipe
+        );
+        assert_eq!(
+            writer.write(&buffer).await.unwrap_err().kind(),
+            io::ErrorKind::BrokenPipe
+        );
+        assert_eq!(
+            writer.flush().await.unwrap_err().kind(),
+            io::ErrorKind::BrokenPipe
+        );
     });
 }
 
@@ -609,6 +621,16 @@ fn serial_port_returns_through_full_command_channel() {
 
         drop(serial_port);
 
+        let payload = b"queued write";
+        let mut write = Box::pin(writer.write(payload));
+        assert!(write.as_mut().poll(&mut context).is_pending());
+
+        let written = timeout(TEST_DEADLINE, write)
+            .await
+            .expect("the pending write should wake when the command channel has room")
+            .expect("the write should run after the serial port returns");
+        assert_eq!(written, payload.len());
+
         let error = read
             .await
             .expect_err("the queued read should observe the absent serial port");
@@ -618,6 +640,7 @@ fn serial_port_returns_through_full_command_channel() {
             .take_serial_port()
             .await
             .expect("the full channel should still return the serial port");
+        assert_eq!(serial_port.written(), payload);
 
         drop(serial_port);
         drop(reader);

@@ -17,11 +17,8 @@
 //! [`Writer::take_serial_port`]. The resulting [`SerialPortGuard`] returns the
 //! port to the worker when dropped.
 
-use std::pin::Pin;
-
 use serialport::SerialPort;
 use tokio::sync::mpsc::channel;
-use tokio::sync::mpsc::error::SendError;
 
 use self::message::Message;
 pub use self::port_guard::SerialPortGuard;
@@ -38,8 +35,6 @@ mod writer;
 
 const RETURN_SLOT_CAPACITY: usize = 1;
 const CHANNEL_CAPACITY_OVERFLOW: &str = "command channel capacity exceeds usize";
-
-type SendFut<T> = Pin<Box<dyn Future<Output = Result<(), SendError<Message<T>>>> + Send + 'static>>;
 
 /// Extension trait for splitting a serial port into asynchronous I/O halves.
 pub trait AsyncSerialPort

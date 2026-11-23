@@ -10,16 +10,18 @@ use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, channel};
 
-use crate::{Message, SendFut, SerialPortGuard};
+use crate::message::{PendingSend, send_command};
+use crate::{Message, SerialPortGuard};
 
 #[derive(Debug)]
 enum Operation {
     Flush,
+
     Write { bytes: usize },
 }
 
-struct PendingOperation<T> {
-    sending: Option<SendFut<T>>,
+struct PendingOperation {
+    sending: Option<PendingSend>,
     receiver: Receiver<io::Result<()>>,
     operation: Operation,
 }
@@ -27,7 +29,7 @@ struct PendingOperation<T> {
 /// Asynchronous writer half for a serial port managed by the background worker.
 pub struct Writer<T> {
     sender: Sender<Message<T>>,
-    pending: Option<PendingOperation<T>>,
+    pending: Option<PendingOperation>,
 }
 
 impl<T> Writer<T>
@@ -101,11 +103,7 @@ where
 
         if let Some(mut sending) = pending.sending.take() {
             match sending.as_mut().poll(cx) {
-                Poll::Ready(result) => {
-                    if result.is_err() {
-                        return Poll::Ready(Err(ErrorKind::BrokenPipe.into()));
-                    }
-                }
+                Poll::Ready(result) => result?,
                 Poll::Pending => {
                     pending.sending.replace(sending);
                     self.pending.replace(pending);
@@ -132,39 +130,36 @@ where
         }
     }
 
-    fn start_flush(&mut self) {
+    fn start_flush(&mut self) -> io::Result<()> {
         let (tx, rx) = channel();
-        let sender = self.sender.clone();
-        let fut = async move { sender.send(Message::Flush(tx)).await };
 
         self.pending.replace(PendingOperation {
-            sending: Some(Box::pin(fut)),
+            sending: send_command(&self.sender, Message::Flush(tx))?,
             receiver: rx,
             operation: Operation::Flush,
         });
+        Ok(())
     }
 
-    fn start_write(&mut self, buf: &[u8]) {
+    fn start_write(&mut self, buf: &[u8]) -> io::Result<()> {
         let bytes = Bytes::copy_from_slice(buf);
         let bytes_written = bytes.len();
         let (tx, rx) = channel();
-        let sender = self.sender.clone();
-        let fut = async move {
-            sender
-                .send(Message::Write {
-                    bytes,
-                    response: tx,
-                })
-                .await
-        };
 
         self.pending.replace(PendingOperation {
-            sending: Some(Box::pin(fut)),
+            sending: send_command(
+                &self.sender,
+                Message::Write {
+                    bytes,
+                    response: tx,
+                },
+            )?,
             receiver: rx,
             operation: Operation::Write {
                 bytes: bytes_written,
             },
         });
+        Ok(())
     }
 }
 
@@ -193,7 +188,7 @@ where
                 return Poll::Ready(Ok(buf.len()));
             }
 
-            writer.start_write(buf);
+            writer.start_write(buf)?;
         }
     }
 
@@ -210,7 +205,7 @@ where
                 }
             }
 
-            writer.start_flush();
+            writer.start_flush()?;
         }
     }
 

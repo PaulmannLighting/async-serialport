@@ -10,13 +10,13 @@ use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, channel};
 
-use crate::message::ReadResponse;
-use crate::{Message, SendFut, SerialPortGuard};
+use crate::message::{PendingSend, ReadResponse, send_command};
+use crate::{Message, SerialPortGuard};
 
 /// Asynchronous reader half for a serial port managed by the background worker.
 pub struct Reader<T> {
     sender: Sender<Message<T>>,
-    sending: Option<SendFut<T>>,
+    sending: Option<PendingSend>,
     receiver: Option<Receiver<ReadResponse>>,
     buffered: Bytes,
 }
@@ -81,10 +81,8 @@ where
             Poll::Ready(result) => {
                 if result.is_err() {
                     self.receiver.take();
-                    Poll::Ready(Err(ErrorKind::BrokenPipe.into()))
-                } else {
-                    Poll::Ready(Ok(()))
                 }
+                Poll::Ready(result)
             }
             Poll::Pending => {
                 self.sending.replace(sending);
@@ -108,20 +106,17 @@ where
         }
     }
 
-    fn start_read(&mut self, capacity: usize) {
+    fn start_read(&mut self, capacity: usize) -> io::Result<()> {
         let (tx, rx) = channel();
-        let sender = self.sender.clone();
-        let fut = async move {
-            sender
-                .send(Message::Read {
-                    capacity,
-                    response: tx,
-                })
-                .await
-        };
-
-        self.sending.replace(Box::pin(fut));
+        self.sending = send_command(
+            &self.sender,
+            Message::Read {
+                capacity,
+                response: tx,
+            },
+        )?;
         self.receiver.replace(rx);
+        Ok(())
     }
 }
 
@@ -148,7 +143,7 @@ where
             }
 
             match reader.poll_response(cx) {
-                Poll::Ready(Ok(None)) => reader.start_read(buf.remaining()),
+                Poll::Ready(Ok(None)) => reader.start_read(buf.remaining())?,
                 Poll::Ready(Ok(Some(bytes))) => {
                     reader.buffered = bytes;
                 }

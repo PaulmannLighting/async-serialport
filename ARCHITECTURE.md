@@ -46,9 +46,10 @@ flowchart LR
     Guard -->|Message::ReturnPort on command channel| Inbox
 ```
 
-Each request sent to the worker contains a one-shot response channel. The async
-half stores both the command-send future and the response receiver until the
-operation completes.
+Each request sent to the worker contains a one-shot response channel. Reads,
+writes, and flushes first try to send immediately. If the command channel is full,
+the async half stores a boxed send future until capacity is available. It keeps
+the response receiver until the operation completes.
 
 ## Read Path
 
