@@ -16,6 +16,12 @@ criteria = "safe-to-deploy"
 version = "0.4.0"
 notes = "AI-assisted local source review of async-serialport 0.4.0. The worker performs I/O on the caller-provided port and transfers it exclusively through a guard with a reserved channel slot for return. The native readiness helper polls the port descriptor and a private Unix socket pair for cancellation. The worker stops and joins that helper before releasing the port. The timed fallback uses a sleeping thread and receives no device handle. Reviewed the crate manifest and library sources for unsafe code, filesystem access, external network connections, and process execution. The crate contains no unsafe code, build script, or access beyond the supplied serial port and private socket pair."
 
+[[audits.async-serialport]]
+who = "Codex (AI-assisted)"
+criteria = "safe-to-deploy"
+delta = "0.4.0 -> 0.4.1"
+notes = "Compared the published 0.4.0 package with the 0.4.1 source, tests, and manifests. Reads, writes, and flushes use Tokio try_send when capacity is available and retain the existing queued send when full. Closed channels still produce BrokenPipe and the serial-port guard keeps its reserved return slot. No unsafe code, ambient capabilities, or dependency changes were introduced."
+
 [[audits.bitflags]]
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
 criteria = "safe-to-deploy"
